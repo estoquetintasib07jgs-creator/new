@@ -268,7 +268,7 @@
     @keyframes slideDownToast { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes fadeOutToast { to { opacity: 0; transform: translateY(-20px); pointer-events: none; } }
 
-    .loading-overlay { position: fixed; inset: 0; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(8px); display: flex; flex-direction: column; gap: 16px; align-items: center; justify-content: center; z-index: 9999; }
+    .loading-overlay { position: fixed; inset: 0; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(8px); display: none; flex-direction: column; gap: 16px; align-items: center; justify-content: center; z-index: 9999; }
 
     .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; z-index: 10000; padding: var(--padding-container); }
     .modal-overlay.active { display: flex; animation: modalBgIn 0.3s; }
