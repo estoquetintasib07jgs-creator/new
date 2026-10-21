@@ -480,7 +480,7 @@
         <div class="card">
           <h2>⚙️ Painel de Administração</h2>
           <p style="text-align:center;color:var(--cor-texto-secundario);margin:-8px 0 24px;line-height:1.5">
-            Configure o método de leitura e gerencie a senha de acesso.
+            Configure o método de leitura. O uso diário não exige login.
           </p>
 
           <div class="admin-option" style="margin-bottom:18px">
@@ -535,10 +535,12 @@
   </nav>
 
   <script>
-    const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbztT62x-sYOCIuv-CvKbN0rZfeDLa9KMpjoE0sFaqnu_fFs8yDErpwxU80_wJVH3c4tSA/exec';
-    const API_TOKEN   = 'sk_ESTOQUE_7vQ2d9A4mX8pL5rB1tC6hN3zY0';
-    const SENHA_ADMIN_PADRAO = '10032001';
-    const CHAVE_SENHA_LOCAL = 'estoqueAdminSenhaV2';
+    // Supabase: use a URL base do projeto, sem /rest/v1 no final.
+    const SUPABASE_URL = 'https://rlutdcnjiujguyamtwwt.supabase.co';
+    const SUPABASE_REST_URL = `${SUPABASE_URL}/rest/v1`;
+    // Cole aqui a publishable key/anon public key do seu projeto.
+    // Nunca coloque a senha do banco ou a service_role key neste arquivo.
+    const SUPABASE_PUBLIC_KEY = 'COLE_AQUI_SUA_CHAVE_PUBLICA';
     const CHAVE_MODO_LOCAL = 'modoEntradaPreferido';
 
     const DOM_CACHE = {
@@ -960,18 +962,21 @@
     }
 
     function obterSenhaAdminLocal() {
-      return localStorage.getItem(CHAVE_SENHA_LOCAL) || SENHA_ADMIN_PADRAO;
+      // Mantida apenas para compatibilidade com elementos antigos da tela.
+      // Não é usada como proteção do banco ou do servidor.
+      return localStorage.getItem('estoqueAdminSenhaLocal') || '';
     }
 
     let adminAutenticado = false;
     let senhaAdminSessao = '';
 
     function abrirAdministracao() {
-      if (adminAutenticado) { mostrarPagina('administracao'); sincronizarModoAdmin(); return; }
-      document.getElementById('login-senha-admin').value = '';
-      document.getElementById('login-admin-erro').style.display = 'none';
-      document.getElementById('modal-login-admin').classList.add('active');
-      setTimeout(() => document.getElementById('login-senha-admin').focus(), 100);
+      // Nesta versão simples não há login para o operador.
+      // A administração do projeto fica protegida pela conta do Supabase/GitHub.
+      adminAutenticado = true;
+      senhaAdminSessao = '';
+      sincronizarModoAdmin();
+      mostrarPagina('administracao');
     }
 
     function fecharLoginAdmin() {
@@ -1016,17 +1021,7 @@
     }
 
     function alterarSenhaAdmin() {
-      if (!adminAutenticado) { showToast('Acesso administrativo expirado.', 'erro'); sairAdministracao(); return; }
-      const atual = document.getElementById('senha-admin-atual').value;
-      const nova = document.getElementById('senha-admin-nova').value;
-      const confirmar = document.getElementById('senha-admin-confirmar').value;
-      if (atual !== obterSenhaAdminLocal()) { showToast('A senha atual está incorreta.', 'erro'); return; }
-      if (nova.length < 6) { showToast('A nova senha deve ter pelo menos 6 caracteres.', 'erro'); return; }
-      if (nova !== confirmar) { showToast('A confirmação não corresponde à nova senha.', 'erro'); return; }
-      localStorage.setItem(CHAVE_SENHA_LOCAL, nova);
-      senhaAdminSessao = nova;
-      ['senha-admin-atual','senha-admin-nova','senha-admin-confirmar'].forEach(id => document.getElementById(id).value = '');
-      showToast('Senha atualizada neste dispositivo.', 'sucesso');
+      showToast('A senha do banco é administrada no Supabase e não fica no site.', 'info');
     }
 
     function sairAdministracao() {
@@ -1060,18 +1055,116 @@
       document.getElementById('quantidade').focus();
     }
 
+    function formatarValidadeBR(valor) {
+      const s = String(valor || '').slice(0, 10);
+      const partes = s.split('-');
+      return partes.length === 3 ? `${partes[2]}/${partes[1]}/${partes[0]}` : String(valor || '');
+    }
+
+    function formatarDataHoraBR(valor) {
+      if (!valor) return '';
+      try {
+        return new Date(valor).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+      } catch { return String(valor); }
+    }
+
+    async function supabaseRequest(path, options = {}) {
+      if (!SUPABASE_PUBLIC_KEY || SUPABASE_PUBLIC_KEY === 'COLE_AQUI_SUA_CHAVE_PUBLICA') {
+        throw new Error('Configure a publishable key do Supabase no index.html.');
+      }
+      const response = await fetch(`${SUPABASE_REST_URL}${path}`, {
+        cache: 'no-store',
+        ...options,
+        headers: {
+          apikey: SUPABASE_PUBLIC_KEY,
+          Authorization: `Bearer ${SUPABASE_PUBLIC_KEY}`,
+          'Content-Type': 'application/json',
+          ...(options.headers || {})
+        }
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(body.message || body.error_description || body.error || body.hint || `Supabase HTTP ${response.status}`);
+      }
+      return body;
+    }
+
     async function apiGet(action) {
-      const separador = action === 'obter' ? `&_=${Date.now()}` : '';
-      const url = `${WEB_APP_URL}?action=${action}&token=${encodeURIComponent(API_TOKEN)}${separador}`;
-      return await (await fetch(url, { cache: 'no-store' })).json();
+      if (action === 'config') {
+        return {
+          status: 'sucesso',
+          config: {
+            modoEntrada: localStorage.getItem(CHAVE_MODO_LOCAL) || 'auto',
+            manual: true,
+            leitor: true,
+            camera: true
+          }
+        };
+      }
+
+      if (action !== 'obter') throw new Error(`Ação GET não suportada: ${action}`);
+
+      const [estoqueRows, alertaRows, movimentacaoRows] = await Promise.all([
+        supabaseRequest('/estoque_resumo?select=item,lote,validade,total,minimo&order=item.asc'),
+        supabaseRequest('/alertas_estoque?select=tipo,descricao,detalhe,dias'),
+        supabaseRequest('/movimentacoes?select=data_hora,tipo,item,lote,validade,quantidade&order=data_hora.desc&limit=100')
+      ]);
+
+      return {
+        status: 'sucesso',
+        dados: {
+          estoque: (estoqueRows || []).map(item => ({
+            item: item.item,
+            lote: item.lote || '',
+            validade: item.validade || '',
+            total: item.total,
+            minimo: item.minimo || 0
+          })),
+          alertas: (alertaRows || []).map(item => ({
+            tipo: item.tipo,
+            descricao: item.descricao || '',
+            detalhe: item.detalhe || '',
+            dias: item.dias
+          })),
+          movimentacoes: (movimentacaoRows || []).map(mov => ({
+            dataHora: formatarDataHoraBR(mov.data_hora),
+            tipo: mov.tipo,
+            item: mov.item,
+            lote: mov.lote,
+            validade: formatarValidadeBR(mov.validade),
+            qtd: mov.quantidade
+          }))
+        }
+      };
     }
 
     async function apiPost(payload) {
-      return await (await fetch(WEB_APP_URL, {
-        method: 'POST', cache: 'no-store',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ ...payload, token: API_TOKEN })
-      })).json();
+      if (payload.action === 'registrar') {
+        return await supabaseRequest('/rpc/registrar_movimentacao', {
+          method: 'POST',
+          body: JSON.stringify({
+            p_tipo: payload.tipo,
+            p_codigo: payload.qrCodeCompleto,
+            p_quantidade: Number(payload.quantidade),
+            p_chave_requisicao: payload.chaveRequisicao || gerarChaveUnica()
+          })
+        });
+      }
+
+      if (payload.action === 'configurarModo') {
+        localStorage.setItem(CHAVE_MODO_LOCAL, payload.modoEntrada);
+        return {
+          status: 'sucesso',
+          mensagem: 'Modo salvo neste dispositivo.',
+          config: { modoEntrada: payload.modoEntrada }
+        };
+      }
+
+      if (payload.action === 'limparEstoque') {
+        throw new Error('A limpeza total foi desativada para preservar o histórico.');
+      }
+
+      throw new Error(`Ação POST não suportada: ${payload.action}`);
     }
 
     function verificarSeVencido(validade) {
@@ -1116,6 +1209,7 @@
         const campo = document.getElementById(id); if (campo) campo.value = '';
       });
       qrCodeCompleto = null;
+      movimentoPendente = null;
       DOM_CACHE.qrResult.textContent = modoEntradaAtual === 'manual'
         ? 'Preencha item, lote e validade.'
         : modoEntradaAtual === 'leitor'
@@ -1128,6 +1222,21 @@
       if (modoEntradaAtual === 'leitor') setTimeout(() => document.getElementById('codigo-leitor')?.focus(), 80);
     }
 
+    function gerarChaveUnica() {
+      if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
+      return `mov-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    }
+
+    let movimentoPendente = null;
+
+    function obterChaveIdempotencia(tipo, qrCode, quantidade) {
+      const fingerprint = `${tipo}|${qrCode}|${quantidade}`;
+      if (!movimentoPendente || movimentoPendente.fingerprint !== fingerprint) {
+        movimentoPendente = { fingerprint, chave: gerarChaveUnica() };
+      }
+      return movimentoPendente.chave;
+    }
+
     async function registrarMovimentacao(tipo, qrCode, quantidade) {
       if (registroEmProgresso) return;
       registroEmProgresso = true;
@@ -1137,7 +1246,13 @@
       statusDiv.className = 'status-info';
       statusDiv.style.display = 'block';
       try {
-        const res = await apiPost({ action: 'registrar', tipo, qrCodeCompleto: qrCode, quantidade });
+        const res = await apiPost({
+          action: 'registrar',
+          tipo,
+          qrCodeCompleto: qrCode,
+          quantidade,
+          chaveRequisicao: obterChaveIdempotencia(tipo, qrCode, quantidade)
+        });
         statusDiv.innerText = res.mensagem;
         statusDiv.className = res.status === 'sucesso' ? 'status-sucesso' : 'status-erro';
         if (res.status === 'sucesso') {
@@ -1269,9 +1384,7 @@
     }
 
     function abrirModalSenha() {
-      document.getElementById('modal-senha').classList.add('active');
-      document.getElementById('senha-admin').value = '';
-      setTimeout(() => document.getElementById('senha-admin').focus(), 100);
+      showToast('A limpeza total foi desativada para preservar o histórico.', 'info');
     }
 
     function fecharModalSenha() {
