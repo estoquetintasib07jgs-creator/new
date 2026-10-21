@@ -1,0 +1,1338 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+  <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+
+  <!-- PWA Meta Tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#00579d">
+
+  <title>Controle de Estoque - WEG</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Biblioteca QR Code removida do head para carregamento sob demanda (Lazy Loading) -->
+
+  <style>
+    :root {
+      --cor-primaria: #00579d;
+      --cor-primaria-dark: #00407a;
+      --cor-primaria-light: #0073c9;
+      --cor-sucesso: #198754;
+      --cor-sucesso-light: #20c997;
+      --cor-perigo: #dc3545;
+      --cor-perigo-light: #e74c59;
+      --cor-alerta: #ffc107;
+      --cor-fundo: #f0f2f5;
+      --cor-surface: #ffffff;
+      --cor-texto: #1a1a2e;
+      --cor-texto-secundario: #6c757d;
+      --cor-texto-claro: #8b95a5;
+      --borda: rgba(0, 0, 0, 0.06);
+      --borda-suave: rgba(0, 0, 0, 0.04);
+      --sombra-md: 0 4px 16px rgba(0, 0, 0, 0.08);
+      --sombra-inner: inset 0 1px 0 rgba(255,255,255,0.8);
+      --radius-sm: 10px;
+      --radius-md: 14px;
+      --radius-lg: 18px;
+      --radius-xl: 22px;
+      --padding-container: 20px;
+      --font-size-base: 17px;
+      --button-height: 54px;
+      --input-height: 54px;
+      --nav-height: 68px;
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+      --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      --verde: #28a745;
+    }
+
+    @media (max-width: 640px) {
+      :root {
+        --padding-container: 10px;
+        --font-size-base: 14px;
+        --button-height: 48px;
+        --input-height: 48px;
+        --nav-height: 60px;
+        --radius-lg: 12px;
+      }
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
+    html { height: 100%; scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      font-size: var(--font-size-base);
+      background: linear-gradient(180deg, #e8eaf0 0%, var(--cor-fundo) 100%);
+      display: flex; flex-direction: column;
+      height: 100vh; overflow: hidden;
+      color: var(--cor-texto);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    .app-header {
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(20px) saturate(180%);
+      padding: 14px var(--padding-container);
+      display: flex; align-items: center; justify-content: center;
+      gap: 14px; box-shadow: 0 1px 0 var(--borda);
+      z-index: 101; flex-shrink: 0; position: sticky; top: 0;
+      padding-top: max(14px, env(safe-area-inset-top, 14px));
+      border-bottom: 1px solid rgba(255,255,255,0.3);
+    }
+    .app-header img { height: clamp(28px, 7vw, 38px); width: auto; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.08)); }
+    
+    .admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .admin-option { border: 1px solid var(--borda); border-radius: 14px; padding: 16px; background: #f8fafc; }
+    .admin-option label { display:block; font-weight:700; margin-bottom:8px; }
+    .admin-option select, .admin-option input { width:100%; min-height:48px; border:1px solid #d6dce4; border-radius:10px; padding:10px 12px; font:inherit; background:#fff; }
+    .admin-primary { width:100%; min-height:50px; border:0; border-radius:12px; background:var(--cor-primaria); color:#fff; font-weight:700; font-size:1rem; cursor:pointer; margin-top:12px; }
+    .admin-secondary { width:100%; min-height:48px; border:1px solid #d6dce4; border-radius:12px; background:#fff; color:var(--cor-texto); font-weight:700; cursor:pointer; margin-top:10px; }
+    .admin-note { margin-top:12px; color:var(--cor-texto-secundario); font-size:.88rem; line-height:1.5; }
+    @media (max-width: 560px) { .admin-grid { grid-template-columns:1fr; } }
+
+    .app-header h1 {
+      margin: 0; font-size: clamp(1.15rem, 4.5vw, 1.6rem); font-weight: 800; color: var(--cor-primaria);
+      letter-spacing: -0.6px; text-align: center; line-height: 1.15;
+      background: linear-gradient(135deg, var(--cor-primaria) 0%, var(--cor-primaria-light) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+
+    .app-main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; scrollbar-width: none; }
+    .app-main::-webkit-scrollbar { display: none; }
+    .content-wrapper { width: 100%; max-width: 800px; margin: 0 auto; padding: 18px var(--padding-container); padding-bottom: calc(var(--nav-height) + var(--safe-bottom) + 16px); }
+
+    .app-nav {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      height: calc(var(--nav-height) + var(--safe-bottom));
+      background: rgba(255, 255, 255, 0.9);
+      backdrop-filter: blur(20px) saturate(180%);
+      box-shadow: 0 -1px 0 var(--borda), 0 -8px 24px rgba(0,0,0,0.04);
+      display: grid; grid-template-columns: repeat(5, 1fr);
+      align-items: stretch; z-index: 1000;
+      padding-bottom: var(--safe-bottom);
+      border-top: 1px solid rgba(255,255,255,0.2);
+    }
+    .nav-link {
+      border: none; background: none; cursor: pointer; padding: 8px 2px;
+      color: var(--cor-texto-secundario); transition: all var(--transition-normal);
+      font-weight: 500; font-size: clamp(0.62rem, 2vw, 0.75rem);
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; 
+      outline: none; position: relative; letter-spacing: 0.2px;
+    }
+    .nav-link .icon { font-size: clamp(1.15rem, 4vw, 1.3rem); line-height: 1; transition: transform var(--transition-normal); }
+    .nav-link:hover .icon { transform: translateY(-2px); }
+    .nav-link.active { color: var(--cor-primaria); font-weight: 700; }
+    .nav-link.active .icon { transform: scale(1.1); }
+    .nav-link.active::before {
+      content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+      width: 24px; height: 3px; background: var(--cor-primaria);
+      border-radius: 0 0 4px 4px; box-shadow: 0 2px 8px rgba(0, 87, 157, 0.3);
+    }
+
+    .page { display: none; }
+    .page.active { display: block; animation: fadeIn var(--transition-normal); }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+    .card {
+      background: var(--cor-surface); padding: clamp(20px, 4vw, 26px);
+      border-radius: var(--radius-xl); border: 1px solid rgba(0, 0, 0, 0.04);
+      box-shadow: var(--sombra-md), var(--sombra-inner); margin-bottom: 20px;
+      transition: box-shadow var(--transition-normal); position: relative; overflow: hidden;
+    }
+    h2 {
+      text-align: center; margin: 0 0 22px; font-size: clamp(1.15rem, 4.5vw, 1.4rem);
+      font-weight: 700; color: var(--cor-texto); letter-spacing: -0.3px;
+      position: relative; display: flex; align-items: center; justify-content: center; gap: 10px;
+    }
+    h2::after {
+      content: ''; position: absolute; bottom: -10px; left: 50%; transform: translateX(-50%);
+      width: 40px; height: 3px; background: linear-gradient(90deg, var(--cor-primaria), var(--cor-primaria-light)); border-radius: 3px;
+    }
+
+    .btn-action-secondary {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      width: 100%; padding: 14px; margin-top: 10px;
+      background: #fff; border: 2px solid var(--cor-perigo);
+      color: var(--cor-perigo); font-weight: 700; border-radius: var(--radius-md);
+      cursor: pointer; transition: all 0.2s; font-size: 1rem;
+    }
+    .btn-action-secondary:active { background: var(--cor-perigo); color: white; transform: scale(0.98); }
+
+    #reader-container {
+      position: relative; width: 100%; max-width: 420px; margin: 0 auto 18px;
+      background: linear-gradient(145deg, #1a1a2e, #2d2d44); border-radius: var(--radius-xl);
+      overflow: hidden; border: 2px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12); aspect-ratio: 1/1;
+    }
+    #reader-container.scanning-active { border-color: var(--cor-sucesso); animation: scanningPulse 2s ease-in-out infinite; }
+    #reader-container.focusing { border-color: #ffc107; box-shadow: 0 0 0 3px rgba(255,193,7,0.25); }
+    @keyframes scanningPulse {
+      0%, 100% { box-shadow: 0 0 0 3px rgba(25, 135, 84, 0.12); }
+      50% { box-shadow: 0 0 0 5px rgba(25, 135, 84, 0.2); }
+    }
+    #reader { width: 100%; height: 100%; }
+    #reader video, #reader canvas { object-fit: cover; width: 100%; height: 100%; border-radius: inherit; }
+
+    .focus-status {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 80px; height: 80px; border: 2px solid rgba(255,255,255,0.5);
+      border-radius: 12px; pointer-events: none; opacity: 0; transition: all 0.2s;
+    }
+    .focus-status.active { opacity: 1; transform: translate(-50%, -50%) scale(0.8); border-color: var(--cor-sucesso); }
+
+    .camera-controls-module {
+      position: relative; margin: 0 auto 20px; width: 100%; max-width: 420px;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; padding: 14px 20px; border-radius: 100px;
+      background: rgba(0, 0, 0, 0.65); backdrop-filter: blur(24px);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .camera-info {
+      display: flex; align-items: center; gap: 8px; color: white;
+      font-size: 0.85rem; font-weight: 600; white-space: nowrap;
+      flex-grow: 1; justify-content: center;
+    }
+    .focus-indicator { width: 8px; height: 8px; border-radius: 50%; background: #999; animation: pulse-normal 0.3s infinite; }
+    .focus-indicator.focusing { background: #ffc107; animation: pulse-focus 0.2s infinite; }
+    .focus-indicator.success { background: var(--verde); animation: none; }
+    @keyframes pulse-normal { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
+    @keyframes pulse-focus { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.7; transform: scale(1.2); } }
+
+    @media (max-width: 480px) {
+      .camera-controls-module { flex-direction: row; align-items: center; justify-content: center; gap: 10px; padding: 10px 12px; max-width: calc(100% - 20px); }
+      .camera-info { font-size: 0.75rem; }
+    }
+    
+    .control-btn {
+      width: 50px; height: 50px; border-radius: 50%; background: rgba(255, 255, 255, 0.12);
+      border: 1.5px solid rgba(255, 255, 255, 0.2); color: white;
+      display: flex; align-items: center; justify-content: center; cursor: pointer;
+      transition: all 0.2s ease; flex: 0 0 auto; font-size: clamp(1.2rem, 3.5vw, 1.5rem);
+      -webkit-tap-highlight-color: transparent; outline: none; touch-action: manipulation;
+      min-width: 48px; min-height: 48px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    }
+    .control-btn:hover { background: rgba(255, 255, 255, 0.28); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3); }
+    .control-btn:active { transform: scale(0.88); background: rgba(255, 255, 255, 0.35); }
+    .control-btn.active { background: linear-gradient(135deg, var(--cor-primaria), #0073c9); border-color: #0073c9; box-shadow: 0 6px 20px rgba(0, 115, 201, 0.4); }
+
+    .qr-result {
+      text-align: center; padding: 16px; margin-bottom: 20px; font-weight: 600;
+      background: #f8f9fa; border-radius: var(--radius-md); border: 1.5px dashed var(--borda);
+      color: var(--cor-texto-secundario); font-size: 0.95rem;
+    }
+    .qr-result.success { background: #d1e7dd; border-color: var(--cor-sucesso); color: #0f5132; border-style: solid; }
+
+    .input-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+    .input-group label { font-weight: 600; font-size: 0.9rem; color: var(--cor-texto-secundario); margin-left: 4px; }
+    .input-group input {
+      width: 100%; height: var(--input-height); padding: 0 18px; font-size: 1rem;
+      border-radius: var(--radius-md); border: 1.5px solid var(--borda);
+      background: #f8f9fa; transition: all 0.2s;
+    }
+    .input-group input:focus { border-color: var(--cor-primaria); background: #fff; outline: none; box-shadow: 0 0 0 4px rgba(0,87,157,0.1); }
+
+    .button-group { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .button-group button {
+      height: var(--button-height); font-weight: 700; border-radius: var(--radius-md); border: none;
+      color: white; font-size: 1rem; cursor: pointer; transition: all 0.2s;
+      background: var(--cor-primaria); box-shadow: 0 4px 12px rgba(0,87,157,0.2);
+    }
+    .button-group button.saida { background: var(--cor-perigo); box-shadow: 0 4px 12px rgba(220,53,69,0.2); }
+    .button-group button:active { transform: scale(0.97); }
+    .button-group button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+    .table-wrapper { overflow-x: auto; border-radius: var(--radius-md); border: 1px solid var(--borda); }
+    .styled-table { width: 100%; border-collapse: collapse; font-size: 0.95rem; background: var(--cor-surface); min-width: 500px; }
+    .styled-table thead tr { background: #f8f9fa; color: var(--cor-texto-secundario); text-align: left; border-bottom: 2px solid var(--borda); }
+    .styled-table th, .styled-table td { padding: 14px 16px; border-bottom: 1px solid var(--borda-suave); white-space: nowrap; }
+    .styled-table tbody tr:last-child td { border-bottom: none; }
+    .styled-table strong { color: var(--cor-primaria); font-weight: 700; }
+    .tipo-entrada { color: var(--cor-sucesso); font-weight: 700; }
+    .tipo-saida { color: var(--cor-perigo); font-weight: 700; }
+
+    .alert-list { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+    .alert-list li { padding: 16px; border-radius: var(--radius-md); border-left: 5px solid #ccc; background: #f8f9fa; font-size: 0.95rem; line-height: 1.5; }
+    .alert-vencido { border-left-color: var(--cor-perigo) !important; background: #fff5f5 !important; color: #c92a2a; }
+    .alert-proximo { border-left-color: var(--cor-alerta) !important; background: #fff9db !important; color: #856404; }
+
+    #toast-container { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 10px; width: 90%; max-width: 400px; }
+    .toast { padding: 14px 20px; border-radius: var(--radius-md); color: white; font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,0.15); display: flex; align-items: center; gap: 10px; animation: slideDownToast 0.3s forwards, fadeOutToast 0.3s forwards 3s; }
+    .toast.sucesso { background: var(--cor-sucesso); }
+    .toast.erro { background: var(--cor-perigo); }
+    .toast.info { background: var(--cor-primaria); }
+    @keyframes slideDownToast { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes fadeOutToast { to { opacity: 0; transform: translateY(-20px); pointer-events: none; } }
+
+    .loading-overlay { position: fixed; inset: 0; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(8px); display: flex; flex-direction: column; gap: 16px; align-items: center; justify-content: center; z-index: 9999; }
+
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; z-index: 10000; padding: var(--padding-container); }
+    .modal-overlay.active { display: flex; animation: modalBgIn 0.3s; }
+    .modal-content { background: var(--cor-surface); border-radius: var(--radius-xl); padding: 32px; max-width: 420px; width: 100%; box-shadow: var(--sombra-xl); animation: slideUp 0.3s; }
+    @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    
+    .modal-header { font-size: 1.25rem; font-weight: 700; color: var(--cor-perigo); margin-bottom: 18px; text-align: center; }
+    .modal-body { text-align: center; color: var(--cor-texto-secundario); margin-bottom: 24px; }
+    
+    .modal-info-box { background: #f8f9fa; padding: 16px; border-radius: var(--radius-md); margin: 16px 0; border-left: 4px solid var(--cor-alerta); text-align: left; }
+    .modal-info-box div { display: flex; justify-content: space-between; padding: 4px 0; font-size: 0.9rem; }
+    
+    .modal-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .modal-actions button { padding: 14px; border-radius: var(--radius-sm); border: none; font-weight: 600; cursor: pointer; font-size: 1rem; }
+    .btn-confirmar { background: var(--cor-perigo); color: white; }
+    .btn-cancelar { background: #6c757d; color: white; }
+    
+    #status { margin-top: 16px; margin-bottom: 8px; padding: clamp(14px, 3.5vw, 16px); border-radius: 12px; font-weight: 600; display: none; animation: slideDown .2s ease; font-size: clamp(1rem, 3vw, 1.05rem); }
+    @keyframes slideDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+    .status-sucesso { background: #d1e7dd; color: var(--cor-sucesso); display: block; }
+    .status-erro { background: #f8d7da; color: var(--cor-perigo); display: block; }
+    .status-info { background: #d1ecf1; color: #0c5460; display: block; }
+
+    html.webview-android-zoom-fallback #reader video {
+        transform: scale(1.15) !important;
+        transform-origin: center center !important;
+        width: 87% !important;
+        height: 87% !important;
+        margin: 6.5% auto !important;
+    }
+
+    @media (min-width: 900px) {
+      :root { --padding-container: 28px; --nav-width: 220px; }
+      body { overflow: hidden; }
+      .app-header { min-height: 72px; padding-left: 28px; padding-right: 28px; }
+      .app-main { margin-left: var(--nav-width); height: calc(100vh - 72px); overflow-y: auto; }
+      .content-wrapper { max-width: 1500px; margin: 0 auto; padding: 28px 34px 42px; }
+      .card { border-radius: 16px; padding: 28px 32px; margin-bottom: 24px; }
+      .app-nav { top: 72px; bottom: 0; left: 0; right: auto; width: var(--nav-width); height: auto; padding: 18px 12px; display: flex; flex-direction: column; justify-content: flex-start; gap: 8px; border-top: 0; border-right: 1px solid var(--borda); box-shadow: 4px 0 18px rgba(0,0,0,.06); }
+      .nav-link { min-height: 64px; flex-direction: row; justify-content: flex-start; gap: 14px; padding: 10px 18px; border-radius: 12px; font-size: .92rem; }
+      .nav-link .icon { width: 28px; text-align: center; }
+      .nav-link.active { background: #eaf4fb; }
+      .nav-link.active::before { top: 12px; left: 0; transform: none; width: 4px; height: 40px; border-radius: 0 4px 4px 0; }
+      .page > .card { min-height: calc(100vh - 150px); }
+      .table-wrapper { max-height: calc(100vh - 300px); overflow: auto; }
+      .styled-table { min-width: 760px; font-size: .92rem; }
+      .styled-table th, .styled-table td { padding: 13px 18px; }
+      #page-registrar .card { max-width: 920px; margin-left: auto; margin-right: auto; }
+      #reader-container, .camera-controls-module, #manual-fields, #leitor-fields { max-width: 560px !important; }
+      #tabela-estoque { min-width: 900px; }
+      #page-movimentacoes .table-wrapper { max-height: calc(100vh - 280px); }
+    }
+    @media (min-width: 1400px) {
+      .content-wrapper { padding-left: 52px; padding-right: 52px; }
+      .styled-table th, .styled-table td { padding-left: 22px; padding-right: 22px; }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="toast-container"></div>
+
+  <header class="app-header">
+    <img src="./logo-weg.png" alt="WEG Logo" onerror="this.style.display='none'">
+    <h1>Controle de Estoque</h1>
+  </header>
+
+  <div id="loading-overlay" class="loading-overlay">
+    <svg width="50" height="50" viewBox="0 0 38 38" stroke="var(--cor-primaria)">
+      <g fill="none" fill-rule="evenodd"><g transform="translate(1 1)" stroke-width="2">
+        <circle stroke-opacity=".5" cx="18" cy="18" r="18"/><path d="M36 18c0-9.94-8.06-18-18-18">
+        <animateTransform attributeName="transform" type="rotate" from="0 18 18" to="360 18 18" dur="0.8s" repeatCount="indefinite"/></path>
+      </g></g>
+    </svg>
+    <span style="font-weight: 600; color: var(--cor-texto-secundario);">Sincronizando dados...</span>
+  </div>
+
+  <div id="modal-login-admin" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="titulo-login-admin">
+    <div class="modal-content">
+      <div class="modal-header" id="titulo-login-admin" style="color:var(--cor-primaria)">🔐 Administração</div>
+      <div class="modal-body">
+        <p>Digite a senha de administrador para acessar as configurações.</p>
+        <div class="input-group" style="margin-top:16px">
+          <label for="login-senha-admin">Senha de administrador</label>
+          <input type="password" id="login-senha-admin" autocomplete="current-password" placeholder="Digite sua senha" style="text-align:center">
+        </div>
+        <div id="login-admin-erro" role="alert" style="display:none;color:var(--cor-perigo);font-weight:600;margin-bottom:12px">Senha incorreta.</div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-confirmar" style="background:var(--cor-primaria)" onclick="validarLoginAdmin()">Entrar</button>
+        <button class="btn-cancelar" onclick="fecharLoginAdmin()">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-vencido" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">⚠️ Atenção: Item Vencido</div>
+      <div class="modal-body">
+        <p>Você está tentando dar entrada de um item que já está <strong>vencido</strong>.</p>
+        <div class="modal-info-box">
+          <div><strong>Item:</strong> <span id="modal-item"></span></div>
+          <div><strong>Lote:</strong> <span id="modal-lote"></span></div>
+          <div><strong>Validade:</strong> <span id="modal-validade"></span></div>
+          <div><strong>Quantidade:</strong> <span id="modal-quantidade"></span></div>
+        </div>
+        <p style="margin-bottom: 20px;">Deseja realmente registrar a entrada deste item?</p>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-confirmar" onclick="confirmarEntradaVencida()">Confirmar</button>
+        <button class="btn-cancelar" onclick="cancelarEntradaVencida()">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-senha" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">🔒 Nova Conferência</div>
+      <div class="modal-body">
+        <p>Esta ação irá <strong>apagar todos os dados</strong> de Estoque e Histórico.</p>
+        <p>Digite a senha de administrador para confirmar:</p>
+        <div class="input-group" style="margin-top: 15px;">
+          <input type="password" id="senha-admin" placeholder="Digite a senha" inputmode="numeric" style="text-align:center; letter-spacing: 4px;" />
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-confirmar" onclick="executarLimpeza()">Apagar Tudo</button>
+        <button class="btn-cancelar" onclick="fecharModalSenha()">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <main class="app-main">
+    <div class="content-wrapper">
+      <div id="page-estoque" class="page active">
+        <div class="card">
+          <h2>📦 Consulta de Estoque</h2>
+          <div class="input-group">
+            <input type="text" id="filtro-estoque" onkeyup="filtrarTabela('tabela-estoque', this)" placeholder="Buscar por item, lote ou validade..." />
+          </div>
+          <div class="table-wrapper">
+            <table id="tabela-estoque" class="styled-table">
+              <thead><tr><th>Item</th><th>Lote</th><th>Validade</th><th>Total</th></tr></thead>
+              <tbody id="corpo-tabela-estoque"></tbody>
+            </table>
+          </div>
+          <button class="btn-action-secondary" onclick="abrirModalSenha()">
+            🔄 Iniciar Nova Conferência (Limpar Dados)
+          </button>
+        </div>
+      </div>
+
+      <div id="page-registrar" class="page">
+        <div class="card">
+          <h2>📷 Registrar Movimentação</h2>
+          <div id="reader-container">
+            <div id="reader"></div>
+            <div class="focus-status" id="focusStatus"></div>
+          </div>
+
+          <div class="camera-controls-module">
+            <div class="camera-info">
+              <span class="focus-indicator" id="focusIndicator"></span>
+              <span id="cameraStatus">Pronto</span>
+            </div>
+            <div id="btnFlash" class="control-btn" onclick="toggleFlash()" title="Lanterna">🔦</div>
+          </div>
+          <div id="modo-entrada-box" style="display:none" aria-hidden="true"><select id="modo-entrada" onchange="selecionarModoLocal(this.value)"><option value="auto">Automático</option><option value="camera">Câmera manual</option><option value="manual">Digitação manual</option><option value="leitor">Leitor sem fio</option></select></div>
+          <div id="manual-fields" style="display:none;max-width:420px;margin:0 auto 14px;padding:14px;background:#eef6ff;border:1px solid #cfe5fa;border-radius:var(--radius-md);">
+            <div class="input-group"><label for="manual-item">Item</label><input id="manual-item" inputmode="numeric" placeholder="Código do item"></div>
+            <div class="input-group"><label for="manual-lote">Lote</label><input id="manual-lote" inputmode="numeric" placeholder="Lote"></div>
+            <div class="input-group"><label for="manual-validade">Validade</label><input id="manual-validade" placeholder="DD/MM/AAAA"></div>
+            <button type="button" onclick="prepararEntradaManual()" style="width:100%;min-height:48px;border:0;border-radius:12px;background:var(--cor-primaria);color:#fff;font-weight:700;">Usar dados manuais</button>
+          </div>
+          <div id="leitor-fields" style="display:none;max-width:420px;margin:0 auto 14px;padding:14px;background:#f3fff7;border:1px solid #c8eed7;border-radius:var(--radius-md);">
+            <label for="codigo-leitor" style="display:block;font-weight:700;font-size:.86rem;margin-bottom:8px;">Leitor sem fio</label>
+            <input id="codigo-leitor" autocomplete="off" inputmode="none" placeholder="Aponte o leitor e aguarde o bip" onkeydown="capturarLeitor(event)" style="width:100%;height:54px;padding:0 16px;border:1px solid var(--borda);border-radius:12px;font-size:1rem;">
+            <small style="display:block;margin-top:8px;color:var(--cor-texto-secundario);">Compatível com leitor Bluetooth/USB que funciona como teclado (HID). O leitor deve enviar ENTER ao final.</small>
+          </div>
+          <div id="qr-result" class="qr-result">Aponte a câmera para o Data Matrix</div>
+          <div class="input-group">
+            <label for="quantidade">Quantidade</label>
+            <input type="number" id="quantidade" placeholder="Ex: 5" min="1" inputmode="numeric" />
+          </div>
+          <div class="button-group">
+            <button id="btnEntrada" onclick="enviarDados('Entrada')"> Entrada</button>
+            <button id="btnSaida" class="saida" onclick="enviarDados('Saída')">📤 Saída</button>
+          </div>
+          <div id="status"></div>
+        </div>
+      </div>
+
+      <div id="page-movimentacoes" class="page">
+        <div class="card">
+          <h2>📋 Últimas Movimentações</h2>
+          <div class="input-group">
+            <input type="text" id="filtro-movimentacoes" onkeyup="filtrarTabela('tabela-movimentacoes', this)" placeholder="Buscar movimentações..." />
+          </div>
+          <div class="table-wrapper">
+            <table id="tabela-movimentacoes" class="styled-table">
+              <thead><tr><th>Data</th><th>Tipo</th><th>Item</th><th>Lote</th><th>Validade</th><th>Qtd</th></tr></thead>
+              <tbody id="corpo-tabela-movimentacoes"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="page-administracao" class="page">
+        <div class="card">
+          <h2>⚙️ Painel de Administração</h2>
+          <p style="text-align:center;color:var(--cor-texto-secundario);margin:-8px 0 24px;line-height:1.5">
+            Configure o método de leitura e gerencie a senha de acesso.
+          </p>
+
+          <div class="admin-option" style="margin-bottom:18px">
+            <label for="modo-admin">Método de leitura do código</label>
+            <select id="modo-admin">
+              <option value="auto">Automático (câmera com leitura automática)</option>
+              <option value="camera">Câmera manual</option>
+              <option value="manual">Digitação manual dos dados</option>
+              <option value="leitor">Leitor sem fio Bluetooth/USB</option>
+            </select>
+            <button class="admin-primary" type="button" onclick="salvarModoAdmin()">💾 Salvar modo de leitura</button>
+            <p class="admin-note">O modo escolhido será aplicado à tela Registrar. O seletor de modo não ficará visível para os operadores.</p>
+          </div>
+
+          <div class="admin-option">
+            <label for="senha-admin-atual">Alterar senha de administrador</label>
+            <div class="input-group">
+              <label for="senha-admin-atual">Senha atual</label>
+              <input type="password" id="senha-admin-atual" autocomplete="current-password" placeholder="Senha atual">
+            </div>
+            <div class="input-group">
+              <label for="senha-admin-nova">Nova senha</label>
+              <input type="password" id="senha-admin-nova" autocomplete="new-password" placeholder="Crie uma nova senha" minlength="6">
+            </div>
+            <div class="input-group">
+              <label for="senha-admin-confirmar">Confirmar nova senha</label>
+              <input type="password" id="senha-admin-confirmar" autocomplete="new-password" placeholder="Digite novamente a nova senha" minlength="6">
+            </div>
+            <button class="admin-primary" type="button" onclick="alterarSenhaAdmin()">🔑 Atualizar senha</button>
+            <p class="admin-note">A senha alterada nesta versão fica salva neste navegador/dispositivo. Para proteger também as operações no servidor e sincronizar a senha entre dispositivos, o Apps Script precisa validar e armazenar a nova senha no servidor.</p>
+          </div>
+
+          <button class="admin-secondary" type="button" onclick="sairAdministracao()">Sair do perfil de administração</button>
+        </div>
+      </div>
+
+      <div id="page-alertas" class="page">
+        <div class="card">
+          <h2>⚠️ Alertas de Estoque</h2>
+          <ul id="lista-alertas" class="alert-list"></ul>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <nav class="app-nav">
+    <button id="nav-estoque" class="nav-link active" onclick="mostrarPagina('estoque')"><span class="icon">📦</span><span>Estoque</span></button>
+    <button id="nav-registrar" class="nav-link" onclick="mostrarPagina('registrar')"><span class="icon">📷</span><span>Registrar</span></button>
+    <button id="nav-movimentacoes" class="nav-link" onclick="mostrarPagina('movimentacoes')"><span class="icon">📋</span><span>Histórico</span></button>
+    <button id="nav-alertas" class="nav-link" onclick="mostrarPagina('alertas')"><span class="icon">⚠️</span><span>Alertas</span></button>
+    <button id="nav-administracao" class="nav-link" onclick="abrirAdministracao()"><span class="icon">⚙️</span><span>Admin</span></button>
+  </nav>
+
+  <script>
+    const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbztT62x-sYOCIuv-CvKbN0rZfeDLa9KMpjoE0sFaqnu_fFs8yDErpwxU80_wJVH3c4tSA/exec';
+    const API_TOKEN   = 'sk_ESTOQUE_7vQ2d9A4mX8pL5rB1tC6hN3zY0';
+    const SENHA_ADMIN_PADRAO = '10032001';
+    const CHAVE_SENHA_LOCAL = 'estoqueAdminSenhaV2';
+    const CHAVE_MODO_LOCAL = 'modoEntradaPreferido';
+
+    const DOM_CACHE = {
+      readerContainer: null, reader: null, qrResult: null, status: null,
+      btnFlash: null, btnEntrada: null, btnSaida: null,
+      loadingOverlay: null, focusStatus: null, focusIndicator: null, cameraStatus: null
+    };
+
+    let html5QrCode = null, currentTrack = null, flashOn = false, qrCodeCompleto = null;
+    let scannerActive = false, rearCameras = [], currentRearIndex = 0;
+    let autoTorchEnabled = true;
+    let autoFocusActive = false, focusAttempts = 0;
+    let entradaVencidaPendente = null, registroEmProgresso = false;
+    let isTablet = false, deviceType = 'phone';
+    let consecutiveFocusSuccess = 0;
+    let focusIntervalId = null;
+    let torchMethod = null, torchSupported = null;
+    let modoEntradaAtual = 'auto';
+    let qrLibraryLoaded = false;
+
+    let appData = { estoque: [], alertas: [], movimentacoes: [] };
+    let dataCache = null, lastDataFetch = 0;
+    const CACHE_DURATION = 3000;
+
+    // NOVO: Carregamento sob demanda da biblioteca QR Code (Lazy Loading)
+    async function carregarBibliotecaQR() {
+      if (qrLibraryLoaded || window.Html5Qrcode) {
+        qrLibraryLoaded = true;
+        return Promise.resolve();
+      }
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js";
+        script.onload = () => { qrLibraryLoaded = true; resolve(); };
+        script.onerror = () => reject(new Error("Falha ao carregar biblioteca QR"));
+        document.head.appendChild(script);
+      });
+    }
+
+    function detectDeviceType() {
+      const screenWidth = window.innerWidth;
+      const screenHeight = window.innerHeight;
+      const minDimension = Math.min(screenWidth, screenHeight);
+      const maxDimension = Math.max(screenWidth, screenHeight);
+      const aspectRatio = maxDimension / minDimension;
+      isTablet = minDimension >= 600 || (minDimension >= 480 && aspectRatio < 2);
+      deviceType = isTablet ? 'tablet' : 'phone';
+    }
+
+    function getOptimalQRBoxSize() {
+      if (isTablet) return { width: 280, height: 280 };
+      return { width: 240, height: 240 };
+    }
+
+    function getOptimalFPS() {
+      if (isTablet) return 45;
+      return 30;
+    }
+
+    function initDOMCache() {
+      DOM_CACHE.readerContainer = document.getElementById('reader-container');
+      DOM_CACHE.reader          = document.getElementById('reader');
+      DOM_CACHE.qrResult        = document.getElementById('qr-result');
+      DOM_CACHE.status          = document.getElementById('status');
+      DOM_CACHE.btnFlash        = document.getElementById('btnFlash');
+      DOM_CACHE.btnEntrada      = document.getElementById('btnEntrada');
+      DOM_CACHE.btnSaida        = document.getElementById('btnSaida');
+      DOM_CACHE.loadingOverlay  = document.getElementById('loading-overlay');
+      DOM_CACHE.focusStatus     = document.getElementById('focusStatus');
+      DOM_CACHE.focusIndicator  = document.getElementById('focusIndicator');
+      DOM_CACHE.cameraStatus    = document.getElementById('cameraStatus');
+    }
+
+    function normalizeError(err) {
+      if (!err) return 'Erro desconhecido.';
+      if (typeof err === 'string') return err;
+      if (err.message) return err.message;
+      return String(err);
+    }
+
+    function beep(duration = 80, frequency = 1200, volume = 0.4) {
+      try {
+        const ctx  = new (window.AudioContext || window.webkitAudioContext)();
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = frequency;
+        gain.gain.value = volume;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + duration / 1000);
+      } catch {}
+    }
+
+    function showToast(mensagem, tipo = 'info') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = `toast ${tipo}`;
+      toast.innerHTML = mensagem;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 3500);
+    }
+
+    function updateFocusIndicator(status) {
+      const indicator = DOM_CACHE.focusIndicator;
+      const statusText = DOM_CACHE.cameraStatus;
+      const container = DOM_CACHE.readerContainer;
+      
+      indicator.classList.remove('focusing', 'success');
+      container.classList.remove('focusing');
+      
+      if (status === 'focusing') {
+        indicator.classList.add('focusing');
+        container.classList.add('focusing');
+        statusText.textContent = 'Focando...';
+      } else if (status === 'success') {
+        indicator.classList.add('success');
+        statusText.textContent = 'Focado ✓';
+      } else {
+        statusText.textContent = 'Pronto';
+      }
+    }
+
+    async function applyTorch(enable) {
+      if (!currentTrack) return false;
+      if (torchMethod === 'advanced') {
+        try { await currentTrack.applyConstraints({ advanced: [{ torch: enable }] }); return true; }
+        catch { torchMethod = null; }
+      }
+      if (torchMethod === 'direct') {
+        try { await currentTrack.applyConstraints({ torch: enable }); return true; }
+        catch { torchMethod = null; }
+      }
+      if (torchMethod === 'imageCapture') {
+        try {
+          const ic = new ImageCapture(currentTrack);
+          await ic.setOptions({ torch: enable }); return true;
+        } catch { torchMethod = null; }
+      }
+      try { await currentTrack.applyConstraints({ advanced: [{ torch: enable }] }); torchMethod = 'advanced'; return true; } catch {}
+      try { await currentTrack.applyConstraints({ torch: enable }); torchMethod = 'direct'; return true; } catch {}
+      try { if (typeof ImageCapture !== 'undefined') { const ic = new ImageCapture(currentTrack); await ic.setOptions({ torch: enable }); torchMethod = 'imageCapture'; return true; } } catch {}
+      return false;
+    }
+
+    async function detectTorchSupport() {
+      if (!currentTrack) { torchSupported = false; return false; }
+      try { if (typeof currentTrack.getCapabilities === 'function') { const caps = currentTrack.getCapabilities(); if (caps && caps.torch === true) { torchSupported = true; return true; } } } catch {}
+      try { const ok = await applyTorch(false); if (ok) { torchSupported = true; return true; } } catch {}
+      torchSupported = false; return false;
+    }
+
+    async function startScannerWithDevice(deviceId = null) {
+      if (scannerActive) return;
+      
+      // Carrega a biblioteca apenas quando necessário
+      try {
+        DOM_CACHE.qrResult.textContent = 'Carregando leitor...';
+        await carregarBibliotecaQR();
+      } catch (err) {
+        DOM_CACHE.qrResult.textContent = 'Erro ao carregar leitor.';
+        showToast("Falha ao carregar biblioteca de leitura.", "erro");
+        return;
+      }
+
+      await stopScanner(true);
+      DOM_CACHE.qrResult.textContent = 'Iniciando câmera...';
+      DOM_CACHE.status.style.display = 'none';
+      DOM_CACHE.readerContainer.classList.remove('scanning-active');
+      updateFocusIndicator('default');
+
+      torchMethod = null;
+      torchSupported = null;
+      flashOn = false;
+      DOM_CACHE.btnFlash.classList.remove('active');
+
+      html5QrCode = new Html5Qrcode("reader");
+      
+      const qrbox = getOptimalQRBoxSize();
+      const fps = getOptimalFPS();
+      
+      const config = {
+        fps: fps,
+        qrbox: qrbox,
+        disableFlip: true,
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.DATA_MATRIX,
+          Html5QrcodeSupportedFormats.QR_CODE
+        ],
+        experimentalFeatures: { useBarCodeDetectorIfSupported: false },
+        aspectRatio: 1.0
+      };
+
+      try {
+        const cameras = await Html5Qrcode.getCameras();
+        const rear = cameras.filter(c => /back|rear|environment|traseir/i.test(c.label || ''));
+        rearCameras = rear.length ? rear : cameras;
+        const targetId = deviceId || (rearCameras.length > 0 ? rearCameras[0].id : null);
+        
+        await html5QrCode.start(targetId || { facingMode: "environment" }, config, onScanSuccess);
+        scannerActive = true;
+        DOM_CACHE.qrResult.textContent = 'Aguardando leitura...';
+        DOM_CACHE.readerContainer.classList.add('scanning-active');
+        
+        const videoElem = DOM_CACHE.reader.querySelector("video");
+        currentTrack = videoElem?.srcObject?.getVideoTracks?.()[0] || null;
+        
+        if (currentTrack) {
+          setupTurboAutofocus();
+          setTimeout(() => applyHardwareConstraints(), 800);
+          await setupControls();
+          if (autoTorchEnabled) await turnOnTorchAutomatically();
+        }
+      } catch (err) {
+        DOM_CACHE.qrResult.textContent = `Erro: ${normalizeError(err)}`;
+        showToast("Erro ao acessar câmera.", "erro");
+        updateFocusIndicator('error');
+      }
+    }
+
+    async function turnOnTorchAutomatically() {
+      if (!currentTrack) return;
+      try { const ok = await applyTorch(true); if (ok) { flashOn = true; DOM_CACHE.btnFlash.classList.add('active'); } } 
+      catch (err) { console.warn('Erro ao ligar lanterna:', err); }
+    }
+
+    async function turnOffTorchAutomatically() {
+      if (!currentTrack) return;
+      try { const ok = await applyTorch(false); if (ok) { flashOn = false; DOM_CACHE.btnFlash.classList.remove('active'); } } 
+      catch (err) { console.warn('Erro ao desligar lanterna:', err); }
+    }
+
+    function onScanSuccess(decodedText) {
+      if (qrCodeCompleto || !scannerActive) return;
+      qrCodeCompleto = decodedText;
+      beep(80, 1200, 0.4);
+      if (navigator.vibrate) navigator.vibrate(100);
+      DOM_CACHE.qrResult.innerHTML = "✔️ <strong style='color:var(--cor-sucesso)'>Lido: " + decodedText.split(';')[1] + "</strong>";
+      DOM_CACHE.qrResult.classList.add('success');
+      updateFocusIndicator('success');
+      setTimeout(() => document.getElementById('quantidade').focus(), 200);
+      stopScanner();
+    }
+
+    async function stopScanner(silent = false) {
+      try {
+        if (autoTorchEnabled && flashOn) await turnOffTorchAutomatically();
+        if (focusIntervalId) { clearInterval(focusIntervalId); focusIntervalId = null; }
+        if (html5QrCode && scannerActive) {
+          await html5QrCode.stop().catch(() => {});
+          await html5QrCode.clear().catch(() => {});
+        }
+        if (currentTrack) currentTrack.stop();
+      } catch {}
+      finally {
+        currentTrack = null;
+        scannerActive = false;
+        autoFocusActive = false;
+        consecutiveFocusSuccess = 0;
+        DOM_CACHE.readerContainer.classList.remove('scanning-active', 'focusing');
+        if (!silent) updateFocusIndicator('default');
+      }
+    }
+
+    async function tryApplyConstraint(track, key, value) {
+      if (!track || track.readyState !== 'live') return false;
+      try { await track.applyConstraints({ advanced: [{ [key]: value }] }); return true; }
+      catch { try { await track.applyConstraints({ [key]: value }); return true; } catch { return false; } }
+    }
+
+    async function applyHardwareConstraints() {
+      const video = document.querySelector('#reader video');
+      if (!video || !video.srcObject) {
+        setTimeout(applyHardwareConstraints, 300);
+        return;
+      }
+      const track = video.srcObject.getVideoTracks()[0];
+      if (!track) { setTimeout(applyHardwareConstraints, 300); return; }
+      currentTrack = track;
+
+      let caps = {};
+      try { caps = track.getCapabilities?.() || {}; } catch {}
+      if (window.AndroidBridge?.logDebug) window.AndroidBridge.logDebug(`Capabilities: ${JSON.stringify(caps)}`);
+
+      if (caps.zoom?.min !== undefined && caps.zoom?.max !== undefined) {
+        const target = caps.zoom.min + ((caps.zoom.max - caps.zoom.min) * 0.6);
+        const ok = await tryApplyConstraint(track, 'zoom', target);
+        if (window.AndroidBridge?.onConstraintApplied) window.AndroidBridge.onConstraintApplied('zoom', ok, `Target: ${target.toFixed(2)}`);
+        if (!ok) document.documentElement.classList.add('webview-android-zoom-fallback');
+      } else {
+        document.documentElement.classList.add('webview-android-zoom-fallback');
+        if (window.AndroidBridge?.onConstraintApplied) window.AndroidBridge.onConstraintApplied('zoom', false, 'Não suportado');
+      }
+
+      const hasTorch = caps.torch !== undefined;
+      DOM_CACHE.btnFlash.style.display = hasTorch ? 'flex' : 'none';
+      if (window.AndroidBridge?.onConstraintApplied) window.AndroidBridge.onConstraintApplied('torch', hasTorch, `Suporte: ${hasTorch}`);
+    }
+
+    async function applyFixedZoom(maxAttempts = 5, delayMs = 300) {
+      const notifyAndroid = (success, message = '') => {
+        if (window.AndroidBridge && typeof window.AndroidBridge.onZoomApplied === 'function') window.AndroidBridge.onZoomApplied(success);
+        if (window.AndroidBridge && typeof window.AndroidBridge.logDebug === 'function') window.AndroidBridge.logDebug(`[Zoom] ${message}`);
+      };
+      
+      const tryApplyZoom = async (attempt) => {
+        if (attempt > maxAttempts) {
+          notifyAndroid(false, `Falha após ${maxAttempts} tentativas`);
+          return false;
+        }
+        try {
+          const videoElem = document.querySelector('#reader video');
+          if (!videoElem || !videoElem.srcObject) { await new Promise(r => setTimeout(r, delayMs)); return tryApplyZoom(attempt + 1); }
+          const tracks = videoElem.srcObject.getVideoTracks();
+          if (!tracks || tracks.length === 0) { await new Promise(r => setTimeout(r, delayMs)); return tryApplyZoom(attempt + 1); }
+          const track = tracks[0];
+          if (typeof track.getCapabilities !== 'function') { notifyAndroid(false, 'getCapabilities não suportado'); return false; }
+          const capabilities = track.getCapabilities();
+          if (!capabilities.zoom || capabilities.zoom.min === undefined) { notifyAndroid(false, 'Zoom não suportado'); return false; }
+          const targetZoom = capabilities.zoom.min + ((capabilities.zoom.max - capabilities.zoom.min) * 0.6);
+          await track.applyConstraints({ advanced: [{ zoom: targetZoom }] });
+          notifyAndroid(true, `Zoom ${targetZoom.toFixed(2)} aplicado`);
+          return true;
+        } catch (err) {
+          await new Promise(r => setTimeout(r, delayMs));
+          return tryApplyZoom(attempt + 1);
+        }
+      };
+      return tryApplyZoom(1);
+    }
+
+    function setupTurboAutofocus() {
+      if (!currentTrack?.applyConstraints) return;
+      autoFocusActive = true;
+      focusAttempts = 0;
+      consecutiveFocusSuccess = 0;
+      currentTrack.applyConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(() => {});
+      clearInterval(focusIntervalId);
+      const focusInterval = isTablet ? 200 : 100;
+      
+      focusIntervalId = setInterval(() => {
+        if (currentTrack && autoFocusActive && scannerActive) {
+          focusAttempts++;
+          updateFocusIndicator('focusing');
+          const isSingleShot = isTablet ? (focusAttempts % 4 === 0) : (focusAttempts % 3 === 0);
+          
+          if (isSingleShot) {
+            currentTrack.applyConstraints({ advanced: [{ focusMode: "single-shot" }] })
+              .then(() => {
+                consecutiveFocusSuccess++;
+                if (consecutiveFocusSuccess >= 2) {
+                  updateFocusIndicator('success');
+                  setTimeout(() => { if (autoFocusActive) updateFocusIndicator('focusing'); }, isTablet ? 500 : 400);
+                }
+                setTimeout(() => {
+                  if (currentTrack && autoFocusActive) {
+                    currentTrack.applyConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(() => {});
+                  }
+                }, isTablet ? 80 : 50);
+              })
+              .catch(() => { consecutiveFocusSuccess = 0; });
+          } else {
+            currentTrack.applyConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(() => {});
+          }
+        }
+      }, focusInterval);
+    }
+
+    async function setupControls() {
+      if (!currentTrack) return;
+      DOM_CACHE.btnFlash.style.display = 'flex';
+      const suporta = await detectTorchSupport();
+      if (!suporta) { DOM_CACHE.btnFlash.style.display = 'none'; } 
+      else { DOM_CACHE.btnFlash.style.display = 'flex'; }
+    }
+
+    async function toggleFlash() {
+      if (!currentTrack) return;
+      const novoEstado = !flashOn;
+      const ok = await applyTorch(novoEstado);
+      if (ok) { flashOn = novoEstado; DOM_CACHE.btnFlash.classList.toggle('active', flashOn); } 
+      else { showToast('Lanterna não disponível neste dispositivo', 'info'); DOM_CACHE.btnFlash.style.display = 'none'; }
+    }
+
+    function aplicarModoUI(modo) {
+      modoEntradaAtual = ['auto','camera','manual','leitor'].includes(modo) ? modo : 'auto';
+      const select = document.getElementById('modo-entrada'); if (select) select.value = modoEntradaAtual;
+      const manual = document.getElementById('manual-fields');
+      const leitor = document.getElementById('leitor-fields');
+      const camera = document.getElementById('reader-container');
+      const controls = document.querySelector('.camera-controls-module');
+      const usarCamera = modoEntradaAtual === 'auto' || modoEntradaAtual === 'camera';
+      
+      if (manual) manual.style.display = modoEntradaAtual === 'manual' ? 'block' : 'none';
+      if (leitor) leitor.style.display = modoEntradaAtual === 'leitor' ? 'block' : 'none';
+      if (camera) camera.style.display = usarCamera ? 'block' : 'none';
+      if (controls) controls.style.display = usarCamera ? 'flex' : 'none';
+      
+      if (modoEntradaAtual === 'manual') DOM_CACHE.qrResult.textContent = 'Preencha item, lote e validade.';
+      if (modoEntradaAtual === 'leitor') setTimeout(() => document.getElementById('codigo-leitor')?.focus(), 150);
+      if (!usarCamera) stopScanner(true); 
+      else if (document.getElementById('page-registrar')?.classList.contains('active')) startScannerWithDevice();
+    }
+
+    function selecionarModoLocal(modo) {
+      aplicarModoUI(modo);
+      localStorage.setItem(CHAVE_MODO_LOCAL, modo);
+    }
+
+    async function carregarConfiguracaoEntrada() {
+      try {
+        const res = await apiGet('config');
+        const remoto = res?.config?.modoEntrada || localStorage.getItem(CHAVE_MODO_LOCAL) || 'auto';
+        aplicarModoUI(remoto);
+      } catch { 
+        aplicarModoUI(localStorage.getItem(CHAVE_MODO_LOCAL) || 'auto'); 
+      }
+    }
+
+    function obterSenhaAdminLocal() {
+      return localStorage.getItem(CHAVE_SENHA_LOCAL) || SENHA_ADMIN_PADRAO;
+    }
+
+    let adminAutenticado = false;
+    let senhaAdminSessao = '';
+
+    function abrirAdministracao() {
+      if (adminAutenticado) { mostrarPagina('administracao'); sincronizarModoAdmin(); return; }
+      document.getElementById('login-senha-admin').value = '';
+      document.getElementById('login-admin-erro').style.display = 'none';
+      document.getElementById('modal-login-admin').classList.add('active');
+      setTimeout(() => document.getElementById('login-senha-admin').focus(), 100);
+    }
+
+    function fecharLoginAdmin() {
+      document.getElementById('modal-login-admin').classList.remove('active');
+      document.getElementById('login-senha-admin').value = '';
+    }
+
+    function validarLoginAdmin() {
+      const digitada = document.getElementById('login-senha-admin').value;
+      if (digitada !== obterSenhaAdminLocal()) {
+        document.getElementById('login-admin-erro').style.display = 'block';
+        document.getElementById('login-senha-admin').value = '';
+        return;
+      }
+      adminAutenticado = true;
+      senhaAdminSessao = digitada;
+      fecharLoginAdmin();
+      sincronizarModoAdmin();
+      mostrarPagina('administracao');
+      showToast('Acesso administrativo liberado.', 'sucesso');
+    }
+
+    function sincronizarModoAdmin() {
+      const modo = localStorage.getItem(CHAVE_MODO_LOCAL) || modoEntradaAtual || 'auto';
+      document.getElementById('modo-admin').value = modo;
+    }
+
+    async function salvarModoAdmin() {
+      if (!adminAutenticado) { showToast('Acesse o perfil de administração novamente.', 'erro'); return; }
+      const modo = document.getElementById('modo-admin').value;
+      try {
+        const res = await apiPost({ action:'configurarModo', modoEntrada:modo, adminKey:senhaAdminSessao });
+        if (res.status !== 'sucesso') throw new Error(res.mensagem || 'O servidor recusou a alteração.');
+        aplicarModoUI(res.config?.modoEntrada || modo);
+        localStorage.setItem(CHAVE_MODO_LOCAL, res.config?.modoEntrada || modo);
+        showToast('Modo de leitura salvo com sucesso.', 'sucesso');
+      } catch (err) {
+        aplicarModoUI(modo);
+        localStorage.setItem(CHAVE_MODO_LOCAL, modo);
+        showToast('Modo salvo neste dispositivo. Servidor não confirmou: ' + normalizeError(err), 'info');
+      }
+    }
+
+    function alterarSenhaAdmin() {
+      if (!adminAutenticado) { showToast('Acesso administrativo expirado.', 'erro'); sairAdministracao(); return; }
+      const atual = document.getElementById('senha-admin-atual').value;
+      const nova = document.getElementById('senha-admin-nova').value;
+      const confirmar = document.getElementById('senha-admin-confirmar').value;
+      if (atual !== obterSenhaAdminLocal()) { showToast('A senha atual está incorreta.', 'erro'); return; }
+      if (nova.length < 6) { showToast('A nova senha deve ter pelo menos 6 caracteres.', 'erro'); return; }
+      if (nova !== confirmar) { showToast('A confirmação não corresponde à nova senha.', 'erro'); return; }
+      localStorage.setItem(CHAVE_SENHA_LOCAL, nova);
+      senhaAdminSessao = nova;
+      ['senha-admin-atual','senha-admin-nova','senha-admin-confirmar'].forEach(id => document.getElementById(id).value = '');
+      showToast('Senha atualizada neste dispositivo.', 'sucesso');
+    }
+
+    function sairAdministracao() {
+      adminAutenticado = false;
+      senhaAdminSessao = '';
+      if (document.getElementById('page-administracao').classList.contains('active')) mostrarPagina('estoque');
+    }
+
+    function prepararEntradaManual() {
+      const item = document.getElementById('manual-item').value.trim();
+      const lote = document.getElementById('manual-lote').value.trim();
+      const validade = document.getElementById('manual-validade').value.trim();
+      if (!item || !lote || !validade) { showToast('Informe item, lote e validade.', 'erro'); return; }
+      qrCodeCompleto = `manual;${item};${lote};${validade}`;
+      DOM_CACHE.qrResult.innerHTML = `✔️ <strong style="color:var(--cor-sucesso)">Manual: ${item} / lote ${lote}</strong>`;
+      DOM_CACHE.qrResult.classList.add('success');
+      document.getElementById('quantidade').focus();
+    }
+
+    function capturarLeitor(event) {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      const input = event.currentTarget;
+      const raw = input.value.trim();
+      if (!raw) return;
+      qrCodeCompleto = raw;
+      DOM_CACHE.qrResult.innerHTML = `✔️ <strong style="color:var(--cor-sucesso)">Código recebido pelo leitor</strong>`;
+      DOM_CACHE.qrResult.classList.add('success');
+      input.value = '';
+      beep(80, 1200, 0.4);
+      document.getElementById('quantidade').focus();
+    }
+
+    async function apiGet(action) {
+      const separador = action === 'obter' ? `&_=${Date.now()}` : '';
+      const url = `${WEB_APP_URL}?action=${action}&token=${encodeURIComponent(API_TOKEN)}${separador}`;
+      return await (await fetch(url, { cache: 'no-store' })).json();
+    }
+
+    async function apiPost(payload) {
+      return await (await fetch(WEB_APP_URL, {
+        method: 'POST', cache: 'no-store',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ ...payload, token: API_TOKEN })
+      })).json();
+    }
+
+    function verificarSeVencido(validade) {
+      if (!validade) return false;
+      try {
+        const [dia, mes, ano] = validade.split('/');
+        const dataValidade = new Date(ano, mes - 1, dia);
+        const hoje = new Date();
+        hoje.setHours(0, 0, 0, 0);
+        return dataValidade < hoje;
+      } catch { return false; }
+    }
+
+    function mostrarModalVencido(item, lote, validade, quantidade) {
+      document.getElementById('modal-item').textContent = item || 'N/A';
+      document.getElementById('modal-lote').textContent = lote || 'N/A';
+      document.getElementById('modal-validade').textContent = validade || 'N/A';
+      document.getElementById('modal-quantidade').textContent = quantidade || '0';
+      entradaVencidaPendente = { tipo: 'Entrada', qrCode: qrCodeCompleto, quantidade };
+      document.getElementById('modal-vencido').classList.add('active');
+    }
+
+    async function confirmarEntradaVencida() {
+      document.getElementById('modal-vencido').classList.remove('active');
+      if (entradaVencidaPendente) await registrarMovimentacao(entradaVencidaPendente.tipo, entradaVencidaPendente.qrCode, entradaVencidaPendente.quantidade);
+      entradaVencidaPendente = null;
+    }
+
+    function cancelarEntradaVencida() {
+      document.getElementById('modal-vencido').classList.remove('active');
+      entradaVencidaPendente = null;
+      resetarFormulario();
+      startScannerWithDevice();
+    }
+
+    function liberarBotoes() { DOM_CACHE.btnEntrada.disabled = false; DOM_CACHE.btnSaida.disabled = false; }
+    function bloquearBotoes() { DOM_CACHE.btnEntrada.disabled = true;  DOM_CACHE.btnSaida.disabled = true; }
+
+    function resetarFormulario() {
+      document.getElementById('quantidade').value = '';
+      ['manual-item','manual-lote','manual-validade','codigo-leitor'].forEach(id => {
+        const campo = document.getElementById(id); if (campo) campo.value = '';
+      });
+      qrCodeCompleto = null;
+      DOM_CACHE.qrResult.textContent = modoEntradaAtual === 'manual'
+        ? 'Preencha item, lote e validade.'
+        : modoEntradaAtual === 'leitor'
+          ? 'Aguardando leitura pelo leitor sem fio.'
+          : 'Aponte a câmera para o Data Matrix';
+      DOM_CACHE.qrResult.classList.remove('success');
+      DOM_CACHE.status.style.display = 'none';
+      registroEmProgresso = false;
+      liberarBotoes();
+      if (modoEntradaAtual === 'leitor') setTimeout(() => document.getElementById('codigo-leitor')?.focus(), 80);
+    }
+
+    async function registrarMovimentacao(tipo, qrCode, quantidade) {
+      if (registroEmProgresso) return;
+      registroEmProgresso = true;
+      bloquearBotoes();
+      const statusDiv = DOM_CACHE.status;
+      statusDiv.innerText = 'Registrando...';
+      statusDiv.className = 'status-info';
+      statusDiv.style.display = 'block';
+      try {
+        const res = await apiPost({ action: 'registrar', tipo, qrCodeCompleto: qrCode, quantidade });
+        statusDiv.innerText = res.mensagem;
+        statusDiv.className = res.status === 'sucesso' ? 'status-sucesso' : 'status-erro';
+        if (res.status === 'sucesso') {
+          showToast(res.mensagem, "sucesso");
+          if (autoTorchEnabled && flashOn) await turnOffTorchAutomatically();
+          dataCache = null; lastDataFetch = 0;
+          setTimeout(() => { 
+            resetarFormulario(); 
+            if (modoEntradaAtual === 'auto' || modoEntradaAtual === 'camera') startScannerWithDevice(); 
+            else if (modoEntradaAtual === 'leitor') document.getElementById('codigo-leitor')?.focus(); 
+          }, 600);
+          await carregarTodosOsDados(true);
+        } else { 
+          showToast(res.mensagem, "erro"); 
+          liberarBotoes(); 
+          registroEmProgresso = false; 
+        }
+      } catch (err) {
+        statusDiv.innerText = 'Erro: ' + normalizeError(err);
+        statusDiv.className = 'status-erro';
+        showToast('Erro de conexão', "erro");
+        liberarBotoes();
+        registroEmProgresso = false;
+      }
+    }
+
+    async function enviarDados(tipo) {
+      if (registroEmProgresso) return;
+      const quantidade = document.getElementById('quantidade').value;
+      if (!qrCodeCompleto || !quantidade || quantidade <= 0) {
+        DOM_CACHE.status.innerText = 'Erro: Leia um código e informe a quantidade.';
+        DOM_CACHE.status.className = 'status-erro';
+        DOM_CACHE.status.style.display = 'block';
+        showToast("Leia o código e informe a quantidade.", "erro");
+        return;
+      }
+      if (tipo === 'Entrada') {
+        const qrParts = qrCodeCompleto.split(';');
+        if (verificarSeVencido(qrParts[3])) { mostrarModalVencido(qrParts[1], qrParts[2], qrParts[3], quantidade); return; }
+      }
+      await registrarMovimentacao(tipo, qrCodeCompleto, quantidade);
+    }
+
+    async function carregarTodosOsDados(isUpdate = false) {
+      const overlay = DOM_CACHE.loadingOverlay;
+      const agora = Date.now();
+      
+      if (dataCache && (agora - lastDataFetch) < CACHE_DURATION && !isUpdate) {
+        Object.assign(appData, dataCache);
+        refreshActivePage();
+        return;
+      }
+
+      // OTIMIZAÇÃO: Só mostra overlay travando a tela se for a primeira abertura absoluta (sem dados em cache)
+      if (!isUpdate && appData.estoque.length === 0) {
+        overlay.style.display = 'flex';
+      }
+
+      try {
+        const res = await apiGet('obter');
+        if (res.status === 'sucesso') {
+          dataCache = res.dados; 
+          lastDataFetch = agora;
+          Object.assign(appData, res.dados);
+          // Salva no localStorage para abertura instantânea na próxima vez
+          localStorage.setItem('appDataCache', JSON.stringify(res.dados));
+          refreshActivePage();
+        } else { throw new Error(res.mensagem); }
+      } catch (err) {
+        console.warn('Erro ao carregar dados:', err);
+        if (appData.estoque.length === 0) {
+          showToast('Erro ao carregar dados: ' + normalizeError(err), "erro");
+        }
+      } finally { 
+        overlay.style.display = 'none'; 
+      }
+    }
+
+    function refreshActivePage() {
+      renderizarEstoque();
+      renderizarAlertas();
+      renderizarMovimentacoes();
+    }
+
+    function renderizarEstoque() {
+      const tbody = document.getElementById('corpo-tabela-estoque');
+      if (!appData.estoque?.length) { tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color: var(--cor-texto-claro)">Nenhum item encontrado.</td></tr>'; return; }
+      tbody.innerHTML = appData.estoque.map(item =>
+        `<tr><td data-label="Item">${item.item}</td><td data-label="Lote">${item.lote||''}</td><td data-label="Validade">${item.validade||''}</td><td data-label="Total"><strong>${item.total}</strong></td></tr>`
+      ).join('');
+    }
+
+    function renderizarAlertas() {
+      const lista = document.getElementById('lista-alertas');
+      if (!appData.alertas?.length) { lista.innerHTML = '<li style="text-align:center; color: var(--cor-texto-claro)">🎉 Nenhum alerta no momento.</li>'; return; }
+      lista.innerHTML = appData.alertas.map(item => {
+        const cl = item.tipo === 'Vencido' ? 'alert-vencido' : (item.tipo === 'Vencimento Próximo' ? 'alert-proximo' : '');
+        return `<li class="${cl}"><strong>${item.tipo}</strong><br/>${item.descricao||''}<br/><small>${item.detalhe||''}</small></li>`;
+      }).join('');
+    }
+
+    function renderizarMovimentacoes() {
+      const tbody = document.getElementById('corpo-tabela-movimentacoes');
+      if (!appData.movimentacoes?.length) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--cor-texto-claro)">Nenhuma movimentação encontrada.</td></tr>'; return; }
+      tbody.innerHTML = appData.movimentacoes.map(mov =>
+        `<tr><td data-label="Data">${mov.dataHora}</td><td data-label="Tipo" class="${mov.tipo==='Entrada'?'tipo-entrada':'tipo-saida'}">${mov.tipo}</td><td data-label="Item">${mov.item}</td><td data-label="Lote">${mov.lote}</td><td data-label="Validade">${mov.validade}</td><td data-label="Qtd">${mov.qtd}</td></tr>`
+      ).join('');
+    }
+
+    function filtrarTabela(idTabela, input) {
+      const filtro = input.value.toUpperCase();
+      const linhas = document.getElementById(idTabela).querySelectorAll('tbody tr');
+      requestAnimationFrame(() => {
+        linhas.forEach(row => row.style.display = row.textContent.toUpperCase().includes(filtro) ? '' : 'none');
+      });
+    }
+
+    function mostrarPagina(pageId) {
+      document.querySelectorAll('.page, .nav-link').forEach(el => el.classList.remove('active'));
+      const paginaDestino = document.getElementById('page-' + pageId);
+      if (!paginaDestino) return;
+      paginaDestino.classList.add('active');
+      const navDestino = document.getElementById('nav-' + pageId);
+      if (navDestino) navDestino.classList.add('active');
+      document.querySelector('.app-main').scrollTop = 0;
+      if (pageId === 'registrar') { aplicarModoUI(modoEntradaAtual); }
+      else { stopScanner(); refreshActivePage(); }
+      if (pageId !== 'administracao' && adminAutenticado) { adminAutenticado = false; senhaAdminSessao = ''; }
+    }
+
+    function abrirModalSenha() {
+      document.getElementById('modal-senha').classList.add('active');
+      document.getElementById('senha-admin').value = '';
+      setTimeout(() => document.getElementById('senha-admin').focus(), 100);
+    }
+
+    function fecharModalSenha() {
+      document.getElementById('modal-senha').classList.remove('active');
+    }
+
+    async function executarLimpeza() {
+      const senhaInput = document.getElementById('senha-admin').value;
+      if (senhaInput !== obterSenhaAdminLocal()) {
+        showToast("Senha incorreta!", "erro");
+        document.getElementById('senha-admin').value = '';
+        return;
+      }
+
+      fecharModalSenha();
+      DOM_CACHE.loadingOverlay.style.display = 'flex';
+      DOM_CACHE.loadingOverlay.querySelector('span').textContent = "Limpando base de dados...";
+
+      try {
+        const res = await apiPost({ action: 'limparEstoque' });
+        if (res.status === 'sucesso') {
+          showToast("Dados apagados com sucesso!", "sucesso");
+          dataCache = null; lastDataFetch = 0;
+          localStorage.removeItem('appDataCache');
+          carregarTodosOsDados(true);
+        } else {
+          showToast(res.mensagem, "erro");
+        }
+      } catch (err) {
+        showToast("Erro de conexão ao limpar dados.", "erro");
+      } finally {
+        DOM_CACHE.loadingOverlay.style.display = 'none';
+        DOM_CACHE.loadingOverlay.querySelector('span').textContent = "Sincronizando dados...";
+      }
+    }
+
+    document.getElementById('login-senha-admin')?.addEventListener('keydown', e => {
+      if (e.key === 'Enter') validarLoginAdmin();
+    });
+
+    // OTIMIZAÇÃO: Usa DOMContentLoaded em vez de 'load' para renderizar a interface instantaneamente
+    window.addEventListener('DOMContentLoaded', () => { 
+      detectDeviceType();
+      initDOMCache();
+      
+      // Carrega dados do cache local instantaneamente para não mostrar tela em branco
+      const cachedData = localStorage.getItem('appDataCache');
+      if (cachedData) {
+        try {
+          Object.assign(appData, JSON.parse(cachedData));
+          refreshActivePage();
+        } catch(e) { console.warn('Erro ao ler cache', e); }
+      }
+      
+      carregarConfiguracaoEntrada();
+      carregarTodosOsDados(); // Busca dados frescos em segundo plano
+      
+      if (window.AndroidBridge?.onCameraReady) window.AndroidBridge.onCameraReady();
+    });
+    
+    window.addEventListener('beforeunload', () => { stopScanner(true); });
+  </script>
+</body>
+</html>
