@@ -447,7 +447,7 @@
           <div id="leitor-fields" style="display:none;max-width:420px;margin:0 auto 14px;padding:14px;background:#f3fff7;border:1px solid #c8eed7;border-radius:var(--radius-md);">
             <label for="codigo-leitor" style="display:block;font-weight:700;font-size:.86rem;margin-bottom:8px;">Leitor sem fio</label>
             <input id="codigo-leitor" autocomplete="off" inputmode="none" placeholder="Aponte o leitor e aguarde o bip" onkeydown="capturarLeitor(event)" oninput="agendarCapturaLeitor(event)" onpaste="capturarLeitorColado(event)" style="width:100%;height:54px;padding:0 16px;border:1px solid var(--borda);border-radius:12px;font-size:1rem;">
-            <small style="display:block;margin-top:8px;color:var(--cor-texto-secundario);">Compatível com leitor Bluetooth/USB que funciona como teclado (HID). O leitor deve enviar ENTER ao final.</small>
+            <small style="display:block;margin-top:8px;color:var(--cor-texto-secundario);">Compatível com leitor Bluetooth/USB que funciona como teclado (HID). Aceita ENTER, TAB ou leitura sem terminador.</small>
           </div>
           <div id="qr-result" class="qr-result">Aponte a câmera para o Data Matrix</div>
           <div class="input-group">
@@ -1090,6 +1090,30 @@
         .trim();
     }
 
+    function formatarValidadeDataMatrix(ai, token) {
+      const s = String(token || '').trim();
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) return s;
+      if (/^\d{2}-\d{2}-\d{4}$/.test(s)) return s.replace(/-/g, '/');
+      if (/^\d{2};\d{2};\d{4}$/.test(s)) return s.replace(/;/g, '/');
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+        const [ano, mes, dia] = s.split('-');
+        return `${dia}/${mes}/${ano}`;
+      }
+      // Alguns leitores enviam DDMMYYYY; outros enviam YYYYMMDD.
+      if (/^\d{8}$/.test(s)) {
+        const primeiro = Number(s.slice(0, 4));
+        if (primeiro >= 2000 && primeiro <= 2100) return `${s.slice(6, 8)}/${s.slice(4, 6)}/${s.slice(0, 4)}`;
+        return `${s.slice(0, 2)}/${s.slice(2, 4)}/${s.slice(4, 8)}`;
+      }
+      // Formato GS1 usual dos AIs 15/17: AAMMDD.
+      if (/^\d{6}$/.test(s)) {
+        const yy = Number(s.slice(0, 2));
+        const ano = yy >= 80 ? 1900 + yy : 2000 + yy;
+        return `${s.slice(4, 6)}/${s.slice(2, 4)}/${ano}`;
+      }
+      return '';
+    }
+
     function extrairCamposCodigo(valor) {
       const raw = normalizarCodigoDataMatrix(valor);
       if (!raw) return { item: '', lote: '', validade: '' };
@@ -1099,7 +1123,8 @@
       }
       const item = raw.match(/(?:^|\s)240(\d{8})(?:\s|$)/)?.[1] || '';
       const serial = raw.match(/(?:^|\s)21\s*([0-9]+)(?:\s|$)/)?.[1] || '';
-      const validade = raw.match(/(?:^|\s)16\s*(\d{2}\/\d{2}\/\d{4})(?:\s|$)/)?.[1] || '';
+      const validadeMatch = raw.match(/(?:^|\s)(15|16|17)\s*(\d{2}\/\d{2}\/\d{4}|\d{2}-\d{2}-\d{4}|\d{2};\d{2};\d{4}|\d{4}-\d{2}-\d{2}|\d{8}|\d{6})(?:\s|$)/);
+      const validade = validadeMatch ? formatarValidadeDataMatrix(validadeMatch[1], validadeMatch[2]) : '';
       return { item, lote: serial ? serial.slice(-7) : '', validade };
     }
 
