@@ -386,16 +386,17 @@
 
   <div id="modal-senha" class="modal-overlay">
     <div class="modal-content">
-      <div class="modal-header">🔒 Nova Conferência</div>
+      <div class="modal-header">🔒 Limpar unidade</div>
       <div class="modal-body">
-        <p>Esta ação irá <strong>apagar todos os dados</strong> de Estoque e Histórico.</p>
-        <p>Digite a senha de administrador para confirmar:</p>
+        <p>Esta ação irá apagar os dados da unidade <strong id="modal-unidade">atual</strong>.</p>
+        <p>Os dados da outra unidade não serão apagados.</p>
+        <p>Digite novamente a senha deste perfil para confirmar:</p>
         <div class="input-group" style="margin-top: 15px;">
-          <input type="password" id="senha-admin" placeholder="Digite a senha" inputmode="numeric" style="text-align:center; letter-spacing: 4px;" />
+          <input type="password" id="senha-admin" placeholder="Digite a mesma senha" autocomplete="current-password" style="text-align:center; letter-spacing: 4px;" />
         </div>
       </div>
       <div class="modal-actions">
-        <button class="btn-confirmar" onclick="executarLimpeza()">Apagar Tudo</button>
+        <button class="btn-confirmar" onclick="executarLimpeza()">Apagar dados da unidade</button>
         <button class="btn-cancelar" onclick="fecharModalSenha()">Cancelar</button>
       </div>
     </div>
@@ -415,10 +416,7 @@
               <tbody id="corpo-tabela-estoque"></tbody>
             </table>
           </div>
-          <button class="btn-action-secondary" onclick="abrirModalSenha()">
-            🔄 Iniciar Nova Conferência (Limpar Dados)
-          </button>
-        </div>
+</div>
       </div>
 
       <div id="page-registrar" class="page">
@@ -480,11 +478,11 @@
         <div class="card">
           <h2>⚙️ Painel de Administração</h2>
           <p style="text-align:center;color:var(--cor-texto-secundario);margin:-8px 0 24px;line-height:1.5">
-            Configure o método de leitura. O uso diário não exige login.
+            Perfil administrativo da unidade <strong id="unidade-atual-admin"></strong>.
           </p>
 
           <div class="admin-option" style="margin-bottom:18px">
-            <label for="modo-admin">Método de leitura do código</label>
+            <label for="modo-admin">Método de leitura do código desta unidade</label>
             <select id="modo-admin">
               <option value="auto">Automático (câmera com leitura automática)</option>
               <option value="camera">Câmera manual</option>
@@ -492,25 +490,13 @@
               <option value="leitor">Leitor sem fio Bluetooth/USB</option>
             </select>
             <button class="admin-primary" type="button" onclick="salvarModoAdmin()">💾 Salvar modo de leitura</button>
-            <p class="admin-note">O modo escolhido será aplicado à tela Registrar. O seletor de modo não ficará visível para os operadores.</p>
+            <p class="admin-note">A alteração vale somente para a unidade autenticada e fica salva neste dispositivo.</p>
           </div>
 
-          <div class="admin-option">
-            <label for="senha-admin-atual">Alterar senha de administrador</label>
-            <div class="input-group">
-              <label for="senha-admin-atual">Senha atual</label>
-              <input type="password" id="senha-admin-atual" autocomplete="current-password" placeholder="Senha atual">
-            </div>
-            <div class="input-group">
-              <label for="senha-admin-nova">Nova senha</label>
-              <input type="password" id="senha-admin-nova" autocomplete="new-password" placeholder="Crie uma nova senha" minlength="6">
-            </div>
-            <div class="input-group">
-              <label for="senha-admin-confirmar">Confirmar nova senha</label>
-              <input type="password" id="senha-admin-confirmar" autocomplete="new-password" placeholder="Digite novamente a nova senha" minlength="6">
-            </div>
-            <button class="admin-primary" type="button" onclick="alterarSenhaAdmin()">🔑 Atualizar senha</button>
-            <p class="admin-note">A senha alterada nesta versão fica salva neste navegador/dispositivo. Para proteger também as operações no servidor e sincronizar a senha entre dispositivos, o Apps Script precisa validar e armazenar a nova senha no servidor.</p>
+          <div class="admin-option" style="margin-bottom:18px;border-color:#f3b1b1;background:#fff8f8">
+            <label style="color:var(--cor-perigo)">Limpar dados da conferência desta unidade</label>
+            <p class="admin-note" style="color:#8d3030">A ação apagará as movimentações somente de <strong id="unidade-limpeza-admin"></strong>. A outra unidade não será alterada. Exporte o Excel antes de confirmar.</p>
+            <button class="admin-secondary" type="button" style="border-color:var(--cor-perigo);color:var(--cor-perigo)" onclick="abrirModalSenha()">🗑️ Limpar dados desta unidade</button>
           </div>
 
           <button class="admin-secondary" type="button" onclick="sairAdministracao()">Sair do perfil de administração</button>
@@ -541,6 +527,18 @@
     // Cole aqui a publishable key/anon public key do seu projeto.
     // Nunca coloque a senha do banco ou a service_role key neste arquivo.
     const SUPABASE_PUBLIC_KEY = 'sb_publishable_0iWZDk8NK0o3k09q1BFpbw_dqzwuhUn';
+
+    // Gere o SHA-256 das duas senhas com o arquivo GERAR_HASH_SENHAS.py.
+    // Não coloque as senhas em texto puro neste arquivo público.
+    const ADMIN_PASSWORD_HASHES = {
+      JGS: '04a50d3de65cdf5a2bf701fa796e2d2104b4bdad6bde2b66d8e6ace21895521e',
+      WIJ: '811c708cf72088ebdab6582712945d18450eb9a629701ce44d03ed4c8f8c1c5d'
+    };
+
+    const UNIDADES = {
+      JGS: 'Jaraguá do Sul',
+      WIJ: 'Itajaí'
+    };
     const CHAVE_MODO_LOCAL = 'modoEntradaPreferido';
 
     const DOM_CACHE = {
@@ -559,6 +557,9 @@
     let focusIntervalId = null;
     let torchMethod = null, torchSupported = null;
     let modoEntradaAtual = 'auto';
+    // O primeiro uso do dispositivo precisa ser configurado com uma senha.
+    // Depois disso, o operador comum pode trabalhar sem nova senha.
+    let unidadeAtual = localStorage.getItem('unidadeSelecionada') || null;
     let qrLibraryLoaded = false;
 
     let appData = { estoque: [], alertas: [], movimentacoes: [] };
@@ -948,35 +949,57 @@
 
     function selecionarModoLocal(modo) {
       aplicarModoUI(modo);
-      localStorage.setItem(CHAVE_MODO_LOCAL, modo);
+      if (unidadeAtual) localStorage.setItem(`${CHAVE_MODO_LOCAL}:${unidadeAtual}`, modo);
     }
 
     async function carregarConfiguracaoEntrada() {
       try {
         const res = await apiGet('config');
-        const remoto = res?.config?.modoEntrada || localStorage.getItem(CHAVE_MODO_LOCAL) || 'auto';
+        const remoto = res?.config?.modoEntrada
+          || (unidadeAtual ? localStorage.getItem(`${CHAVE_MODO_LOCAL}:${unidadeAtual}`) : null)
+          || 'auto';
         aplicarModoUI(remoto);
       } catch { 
-        aplicarModoUI(localStorage.getItem(CHAVE_MODO_LOCAL) || 'auto'); 
+        aplicarModoUI(unidadeAtual ? localStorage.getItem(`${CHAVE_MODO_LOCAL}:${unidadeAtual}`) || 'auto' : 'auto'); 
       }
     }
 
-    function obterSenhaAdminLocal() {
-      // Mantida apenas para compatibilidade com elementos antigos da tela.
-      // Não é usada como proteção do banco ou do servidor.
-      return localStorage.getItem('estoqueAdminSenhaLocal') || '';
+    function nomeUnidade(codigo = unidadeAtual) {
+      return UNIDADES[codigo] || codigo;
+    }
+
+    function chaveCacheUnidade() {
+      return unidadeAtual ? `appDataCache:${unidadeAtual}` : 'appDataCache';
+    }
+
+    async function sha256Hex(valor) {
+      const dados = new TextEncoder().encode(String(valor));
+      const digest = await crypto.subtle.digest('SHA-256', dados);
+      return Array.from(new Uint8Array(digest))
+        .map(byte => byte.toString(16).padStart(2, '0'))
+        .join('');
+    }
+
+    async function identificarUnidadePorSenha(senha) {
+      const hash = (await sha256Hex(senha)).toLowerCase();
+      return Object.entries(ADMIN_PASSWORD_HASHES)
+        .find(([, senhaHash]) =>
+          !senhaHash.startsWith('COLE_AQUI') && senhaHash.toLowerCase() === hash
+        )?.[0] || null;
     }
 
     let adminAutenticado = false;
-    let senhaAdminSessao = '';
 
     function abrirAdministracao() {
-      // Nesta versão simples não há login para o operador.
-      // A administração do projeto fica protegida pela conta do Supabase/GitHub.
-      adminAutenticado = true;
-      senhaAdminSessao = '';
-      sincronizarModoAdmin();
-      mostrarPagina('administracao');
+      if (adminAutenticado && unidadeAtual) {
+        sincronizarModoAdmin();
+        mostrarPagina('administracao');
+        return;
+      }
+      document.getElementById('login-admin-erro').style.display = 'none';
+      document.getElementById('login-senha-admin').value = '';
+      document.getElementById('modal-login-admin').classList.add('active');
+      setTimeout(() => document.getElementById('login-senha-admin').focus(), 80);
     }
 
     function fecharLoginAdmin() {
@@ -984,50 +1007,56 @@
       document.getElementById('login-senha-admin').value = '';
     }
 
-    function validarLoginAdmin() {
-      const digitada = document.getElementById('login-senha-admin').value;
-      if (digitada !== obterSenhaAdminLocal()) {
-        document.getElementById('login-admin-erro').style.display = 'block';
-        document.getElementById('login-senha-admin').value = '';
+    async function validarLoginAdmin() {
+      const campo = document.getElementById('login-senha-admin');
+      const erro = document.getElementById('login-admin-erro');
+      const codigo = await identificarUnidadePorSenha(campo.value);
+
+      if (!codigo) {
+        erro.textContent = 'Senha incorreta ou senhas ainda não configuradas.';
+        erro.style.display = 'block';
+        campo.value = '';
         return;
       }
+
+      unidadeAtual = codigo;
       adminAutenticado = true;
-      senhaAdminSessao = digitada;
+      sessionStorage.setItem('unidadeAdmin', unidadeAtual);
+      localStorage.setItem('unidadeSelecionada', unidadeAtual);
       fecharLoginAdmin();
       sincronizarModoAdmin();
+      dataCache = null;
+      lastDataFetch = 0;
+      localStorage.removeItem(chaveCacheUnidade());
+      await carregarTodosOsDados(true);
       mostrarPagina('administracao');
-      showToast('Acesso administrativo liberado.', 'sucesso');
+      showToast(`Administração liberada para ${nomeUnidade()}.`, 'sucesso');
     }
 
     function sincronizarModoAdmin() {
-      const modo = localStorage.getItem(CHAVE_MODO_LOCAL) || modoEntradaAtual || 'auto';
-      document.getElementById('modo-admin').value = modo;
+      document.getElementById('modo-admin').value =
+        localStorage.getItem(`${CHAVE_MODO_LOCAL}:${unidadeAtual}`) || 'auto';
+      document.getElementById('unidade-atual-admin').textContent = nomeUnidade();
+      document.getElementById('unidade-limpeza-admin').textContent = nomeUnidade();
     }
 
-    async function salvarModoAdmin() {
-      if (!adminAutenticado) { showToast('Acesse o perfil de administração novamente.', 'erro'); return; }
-      const modo = document.getElementById('modo-admin').value;
-      try {
-        const res = await apiPost({ action:'configurarModo', modoEntrada:modo, adminKey:senhaAdminSessao });
-        if (res.status !== 'sucesso') throw new Error(res.mensagem || 'O servidor recusou a alteração.');
-        aplicarModoUI(res.config?.modoEntrada || modo);
-        localStorage.setItem(CHAVE_MODO_LOCAL, res.config?.modoEntrada || modo);
-        showToast('Modo de leitura salvo com sucesso.', 'sucesso');
-      } catch (err) {
-        aplicarModoUI(modo);
-        localStorage.setItem(CHAVE_MODO_LOCAL, modo);
-        showToast('Modo salvo neste dispositivo. Servidor não confirmou: ' + normalizeError(err), 'info');
+    function salvarModoAdmin() {
+      if (!adminAutenticado || !unidadeAtual) {
+        showToast('Entre com a senha da unidade antes de alterar o modo.', 'erro');
+        return;
       }
-    }
-
-    function alterarSenhaAdmin() {
-      showToast('A senha do banco é administrada no Supabase e não fica no site.', 'info');
+      const modo = document.getElementById('modo-admin').value;
+      aplicarModoUI(modo);
+      localStorage.setItem(`${CHAVE_MODO_LOCAL}:${unidadeAtual}`, modo);
+      showToast(`Modo de leitura salvo para ${nomeUnidade()}.`, 'sucesso');
     }
 
     function sairAdministracao() {
       adminAutenticado = false;
-      senhaAdminSessao = '';
-      if (document.getElementById('page-administracao').classList.contains('active')) mostrarPagina('estoque');
+      sessionStorage.removeItem('unidadeAdmin');
+      if (document.getElementById('page-administracao').classList.contains('active')) {
+        mostrarPagina('estoque');
+      }
     }
 
     function prepararEntradaManual() {
@@ -1094,7 +1123,9 @@
         return {
           status: 'sucesso',
           config: {
-            modoEntrada: localStorage.getItem(CHAVE_MODO_LOCAL) || 'auto',
+            modoEntrada: unidadeAtual
+              ? localStorage.getItem(`${CHAVE_MODO_LOCAL}:${unidadeAtual}`) || 'auto'
+              : 'auto',
             manual: true,
             leitor: true,
             camera: true
@@ -1104,10 +1135,12 @@
 
       if (action !== 'obter') throw new Error(`Ação GET não suportada: ${action}`);
 
+      if (!unidadeAtual) throw new Error('Entre na Administração com a senha da unidade.');
+      const filtroUnidade = encodeURIComponent(unidadeAtual);
       const [estoqueRows, alertaRows, movimentacaoRows] = await Promise.all([
-        supabaseRequest('/estoque_resumo?select=item,lote,validade,total,minimo&order=item.asc'),
-        supabaseRequest('/alertas_estoque?select=tipo,descricao,detalhe,dias'),
-        supabaseRequest('/movimentacoes?select=data_hora,tipo,item,lote,validade,quantidade&order=data_hora.desc&limit=100')
+        supabaseRequest(`/estoque_resumo_unidade?unidade_codigo=eq.${filtroUnidade}&select=item,lote,validade,total,minimo&order=item.asc`),
+        supabaseRequest(`/alertas_estoque_unidade?unidade_codigo=eq.${filtroUnidade}&select=tipo,descricao,detalhe,dias`),
+        supabaseRequest(`/movimentacoes_unidade?unidade_codigo=eq.${filtroUnidade}&select=data_hora,tipo,item,lote,validade,quantidade&order=data_hora.desc&limit=100`)
       ]);
 
       return {
@@ -1140,19 +1173,23 @@
 
     async function apiPost(payload) {
       if (payload.action === 'registrar') {
+        if (!unidadeAtual) {
+          throw new Error('Este dispositivo ainda não foi vinculado a JGS ou WIJ. Abra Administração e use a senha da unidade.');
+        }
         return await supabaseRequest('/rpc/registrar_movimentacao', {
           method: 'POST',
           body: JSON.stringify({
             p_tipo: payload.tipo,
             p_codigo: payload.qrCodeCompleto,
             p_quantidade: Number(payload.quantidade),
-            p_chave_requisicao: payload.chaveRequisicao || gerarChaveUnica()
+            p_chave_requisicao: payload.chaveRequisicao || gerarChaveUnica(),
+            p_unidade_codigo: unidadeAtual
           })
         });
       }
 
       if (payload.action === 'configurarModo') {
-        localStorage.setItem(CHAVE_MODO_LOCAL, payload.modoEntrada);
+        if (unidadeAtual) localStorage.setItem(`${CHAVE_MODO_LOCAL}:${unidadeAtual}`, payload.modoEntrada);
         return {
           status: 'sucesso',
           mensagem: 'Modo salvo neste dispositivo.',
@@ -1161,7 +1198,14 @@
       }
 
       if (payload.action === 'limparEstoque') {
-        throw new Error('A limpeza total foi desativada para preservar o histórico.');
+        return await supabaseRequest('/rpc/limpar_unidade', {
+          method: 'POST',
+          body: JSON.stringify({
+            p_unidade_codigo: payload.unidadeCodigo,
+            p_confirmacao: payload.confirmacao,
+            p_senha: payload.senha
+          })
+        });
       }
 
       throw new Error(`Ação POST não suportada: ${payload.action}`);
@@ -1318,7 +1362,7 @@
           lastDataFetch = agora;
           Object.assign(appData, res.dados);
           // Salva no localStorage para abertura instantânea na próxima vez
-          localStorage.setItem('appDataCache', JSON.stringify(res.dados));
+          localStorage.setItem(chaveCacheUnidade(), JSON.stringify(res.dados));
           refreshActivePage();
         } else { throw new Error(res.mensagem); }
       } catch (err) {
@@ -1380,44 +1424,64 @@
       document.querySelector('.app-main').scrollTop = 0;
       if (pageId === 'registrar') { aplicarModoUI(modoEntradaAtual); }
       else { stopScanner(); refreshActivePage(); }
-      if (pageId !== 'administracao' && adminAutenticado) { adminAutenticado = false; senhaAdminSessao = ''; }
+      if (pageId !== 'administracao' && adminAutenticado) {
+        adminAutenticado = false;
+        sessionStorage.removeItem('unidadeAdmin');
+      }
     }
 
     function abrirModalSenha() {
-      showToast('A limpeza total foi desativada para preservar o histórico.', 'info');
+      if (!adminAutenticado || !unidadeAtual) {
+        showToast('Entre com a senha da unidade antes de limpar dados.', 'erro');
+        return;
+      }
+      document.getElementById('modal-unidade').textContent = nomeUnidade();
+      document.getElementById('senha-admin').value = '';
+      document.getElementById('modal-senha').classList.add('active');
+      setTimeout(() => document.getElementById('senha-admin').focus(), 80);
     }
 
     function fecharModalSenha() {
       document.getElementById('modal-senha').classList.remove('active');
+      document.getElementById('senha-admin').value = '';
     }
 
     async function executarLimpeza() {
-      const senhaInput = document.getElementById('senha-admin').value;
-      if (senhaInput !== obterSenhaAdminLocal()) {
-        showToast("Senha incorreta!", "erro");
+      const senha = document.getElementById('senha-admin').value;
+      const codigoConfirmado = await identificarUnidadePorSenha(senha);
+      if (codigoConfirmado !== unidadeAtual) {
+        showToast('A senha não pertence à unidade atualmente autenticada.', 'erro');
         document.getElementById('senha-admin').value = '';
         return;
       }
 
+      if (!confirm(`Confirma apagar todas as movimentações de ${nomeUnidade()}?`)) return;
+
       fecharModalSenha();
       DOM_CACHE.loadingOverlay.style.display = 'flex';
-      DOM_CACHE.loadingOverlay.querySelector('span').textContent = "Limpando base de dados...";
+      DOM_CACHE.loadingOverlay.querySelector('span').textContent = `Limpando ${nomeUnidade()}...`;
 
       try {
-        const res = await apiPost({ action: 'limparEstoque' });
+        const res = await apiPost({
+          action: 'limparEstoque',
+          unidadeCodigo: unidadeAtual,
+          confirmacao: `LIMPAR ${unidadeAtual}`,
+          senha
+        });
         if (res.status === 'sucesso') {
-          showToast("Dados apagados com sucesso!", "sucesso");
-          dataCache = null; lastDataFetch = 0;
-          localStorage.removeItem('appDataCache');
-          carregarTodosOsDados(true);
+          showToast(res.mensagem || `Dados de ${nomeUnidade()} apagados.`, 'sucesso');
+          dataCache = null;
+          lastDataFetch = 0;
+          localStorage.removeItem(chaveCacheUnidade());
+          await carregarTodosOsDados(true);
         } else {
-          showToast(res.mensagem, "erro");
+          showToast(res.mensagem || 'O Supabase recusou a limpeza.', 'erro');
         }
       } catch (err) {
-        showToast("Erro de conexão ao limpar dados.", "erro");
+        showToast('Erro ao limpar dados: ' + normalizeError(err), 'erro');
       } finally {
         DOM_CACHE.loadingOverlay.style.display = 'none';
-        DOM_CACHE.loadingOverlay.querySelector('span').textContent = "Sincronizando dados...";
+        DOM_CACHE.loadingOverlay.querySelector('span').textContent = 'Sincronizando dados...';
       }
     }
 
@@ -1431,7 +1495,7 @@
       initDOMCache();
       
       // Carrega dados do cache local instantaneamente para não mostrar tela em branco
-      const cachedData = localStorage.getItem('appDataCache');
+      const cachedData = unidadeAtual ? localStorage.getItem(chaveCacheUnidade()) : null;
       if (cachedData) {
         try {
           Object.assign(appData, JSON.parse(cachedData));
@@ -1440,7 +1504,9 @@
       }
       
       carregarConfiguracaoEntrada();
-      carregarTodosOsDados(); // Busca dados frescos em segundo plano
+      if (unidadeAtual) {
+        carregarTodosOsDados(); // Busca dados frescos em segundo plano
+      }
       
       if (window.AndroidBridge?.onCameraReady) window.AndroidBridge.onCameraReady();
     });
