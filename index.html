@@ -378,7 +378,7 @@
           <div><strong>Validade:</strong> <span id="modal-validade"></span></div>
           <div><strong>Quantidade:</strong> <span id="modal-quantidade"></span></div>
         </div>
-        <p style="margin-bottom: 20px;">Deseja realmente registrar a entrada deste item?</p>
+        <p style="margin-bottom: 20px;">Deseja realmente registrar a entrada desta caixa (quantidade 1)?</p>
       </div>
       <div class="modal-actions">
         <button class="btn-confirmar" onclick="confirmarEntradaVencida()">Confirmar</button>
@@ -450,13 +450,12 @@
             <small style="display:block;margin-top:8px;color:var(--cor-texto-secundario);">Compatível com leitor Bluetooth/USB que funciona como teclado (HID). Aceita ENTER, TAB ou leitura sem terminador.</small>
           </div>
           <div id="qr-result" class="qr-result">Aponte a câmera para o Data Matrix</div>
-          <div class="input-group">
-            <label for="quantidade">Quantidade</label>
-            <input type="number" id="quantidade" placeholder="Ex: 5" min="1" inputmode="numeric" />
+          <div class="qr-result" style="border-style:solid;border-color:#b8dfc8;background:#f0fff5;color:#176b3a">
+            <strong>Entrada automática · 1 caixa por bip</strong><br>
+            Ao ler o código de uma caixa, o sistema registra a entrada com quantidade 1 e prepara a próxima leitura.
           </div>
-          <div class="button-group">
-            <button id="btnEntrada" onclick="enviarDados('Entrada')"> Entrada</button>
-            <button id="btnSaida" class="saida" onclick="enviarDados('Saída')">📤 Saída</button>
+          <div class="button-group" style="grid-template-columns:1fr">
+            <button id="btnEntrada" type="button" disabled>⏳ Aguardando leitura da caixa…</button>
           </div>
           <div id="status"></div>
         </div>
@@ -615,7 +614,7 @@
       DOM_CACHE.status          = document.getElementById('status');
       DOM_CACHE.btnFlash        = document.getElementById('btnFlash');
       DOM_CACHE.btnEntrada      = document.getElementById('btnEntrada');
-      DOM_CACHE.btnSaida        = document.getElementById('btnSaida');
+      DOM_CACHE.btnSaida        = null;
       DOM_CACHE.loadingOverlay  = document.getElementById('loading-overlay');
       DOM_CACHE.focusStatus     = document.getElementById('focusStatus');
       DOM_CACHE.focusIndicator  = document.getElementById('focusIndicator');
@@ -792,8 +791,8 @@
       DOM_CACHE.qrResult.innerHTML = `✔️ <strong style="color:var(--cor-sucesso)">Lido: ${resumoCodigo(codigo)}</strong>`;
       DOM_CACHE.qrResult.classList.add('success');
       updateFocusIndicator('success');
-      setTimeout(() => document.getElementById('quantidade').focus(), 200);
       stopScanner();
+      processarEntradaAutomatica(codigo);
     }
 
     async function stopScanner(silent = false) {
@@ -1076,7 +1075,7 @@
       qrCodeCompleto = `manual;${item};${lote};${validade}`;
       DOM_CACHE.qrResult.innerHTML = `✔️ <strong style="color:var(--cor-sucesso)">Manual: ${item} / lote ${lote}</strong>`;
       DOM_CACHE.qrResult.classList.add('success');
-      document.getElementById('quantidade').focus();
+      processarEntradaAutomatica(qrCodeCompleto);
     }
 
     // Leitores HID podem enviar Enter, NumpadEnter, Tab ou nenhum terminador.
@@ -1144,7 +1143,7 @@
       input.value = '';
       beep(80, 1200, 0.4);
       if (navigator.vibrate) navigator.vibrate(100);
-      document.getElementById('quantidade').focus();
+      processarEntradaAutomatica(codigo);
       return true;
     }
 
@@ -1336,11 +1335,10 @@
       startScannerWithDevice();
     }
 
-    function liberarBotoes() { DOM_CACHE.btnEntrada.disabled = false; DOM_CACHE.btnSaida.disabled = false; }
-    function bloquearBotoes() { DOM_CACHE.btnEntrada.disabled = true;  DOM_CACHE.btnSaida.disabled = true; }
+    function liberarBotoes() { if (DOM_CACHE.btnEntrada) { DOM_CACHE.btnEntrada.disabled = true; DOM_CACHE.btnEntrada.textContent = '⏳ Aguardando leitura da caixa…'; } if (DOM_CACHE.btnSaida) DOM_CACHE.btnSaida.disabled = false; }
+    function bloquearBotoes() { if (DOM_CACHE.btnEntrada) DOM_CACHE.btnEntrada.disabled = true; if (DOM_CACHE.btnSaida) DOM_CACHE.btnSaida.disabled = true; }
 
     function resetarFormulario() {
-      document.getElementById('quantidade').value = '';
       ['manual-item','manual-lote','manual-validade','codigo-leitor'].forEach(id => {
         const campo = document.getElementById(id); if (campo) campo.value = '';
       });
@@ -1378,7 +1376,7 @@
       registroEmProgresso = true;
       bloquearBotoes();
       const statusDiv = DOM_CACHE.status;
-      statusDiv.innerText = 'Registrando...';
+      statusDiv.innerText = 'Registrando entrada de 1 caixa...';
       statusDiv.className = 'status-info';
       statusDiv.style.display = 'block';
       try {
@@ -1417,21 +1415,26 @@
       }
     }
 
-    async function enviarDados(tipo) {
-      if (registroEmProgresso) return;
-      const quantidade = document.getElementById('quantidade').value;
-      if (!qrCodeCompleto || !quantidade || quantidade <= 0) {
-        DOM_CACHE.status.innerText = 'Erro: Leia um código e informe a quantidade.';
-        DOM_CACHE.status.className = 'status-erro';
-        DOM_CACHE.status.style.display = 'block';
-        showToast("Leia o código e informe a quantidade.", "erro");
+    async function processarEntradaAutomatica(codigo = qrCodeCompleto) {
+      if (!codigo || registroEmProgresso) return;
+      qrCodeCompleto = codigo;
+      const quantidade = 1;
+      const campos = extrairCamposCodigo(codigo);
+      if (verificarSeVencido(campos.validade)) {
+        mostrarModalVencido(campos.item, campos.lote, campos.validade, quantidade);
         return;
       }
-      if (tipo === 'Entrada') {
-        const campos = extrairCamposCodigo(qrCodeCompleto);
-        if (verificarSeVencido(campos.validade)) { mostrarModalVencido(campos.item, campos.lote, campos.validade, quantidade); return; }
+      await registrarMovimentacao('Entrada', codigo, quantidade);
+    }
+
+    // Mantida para compatibilidade com chamadas antigas: agora só existe Entrada
+    // e cada leitura registra exatamente uma caixa.
+    async function enviarDados(tipo = 'Entrada') {
+      if (tipo !== 'Entrada') {
+        showToast('Somente entradas estão habilitadas neste sistema.', 'erro');
+        return;
       }
-      await registrarMovimentacao(tipo, qrCodeCompleto, quantidade);
+      await processarEntradaAutomatica(qrCodeCompleto);
     }
 
     async function carregarTodosOsDados(isUpdate = false) {
