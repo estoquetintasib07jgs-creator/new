@@ -85,7 +85,14 @@
       border-bottom: 1px solid rgba(255,255,255,0.3);
     }
     .app-header img { height: clamp(28px, 7vw, 38px); width: auto; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.08)); }
-    
+
+    /* Aviso de entradas aguardando envio para o Google Sheets */
+    #sync-banner {
+      display: none; flex-shrink: 0; z-index: 100;
+      background: #fff3cd; color: #856404; border-bottom: 1px solid #ffe69c;
+      padding: 8px 12px; text-align: center; font-weight: 600; font-size: 0.85rem;
+    }
+
     .admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
     .admin-option { border: 1px solid var(--borda); border-radius: 14px; padding: 16px; background: #f8fafc; }
     .admin-option label { display:block; font-weight:700; margin-bottom:8px; }
@@ -339,6 +346,8 @@
     <h1>Controle de Estoque</h1>
   </header>
 
+  <div id="sync-banner" role="status"></div>
+
   <div id="loading-overlay" class="loading-overlay">
     <svg width="50" height="50" viewBox="0 0 38 38" stroke="var(--cor-primaria)">
       <g fill="none" fill-rule="evenodd"><g transform="translate(1 1)" stroke-width="2">
@@ -524,12 +533,14 @@
   </nav>
 
   <script>
-    // Supabase: use a URL base do projeto, sem /rest/v1 no final.
-    const SUPABASE_URL = 'https://rlutdcnjiujguyamtwwt.supabase.co';
-    const SUPABASE_REST_URL = `${SUPABASE_URL}/rest/v1`;
-    // Cole aqui a publishable key/anon public key do seu projeto.
-    // Nunca coloque a senha do banco ou a service_role key neste arquivo.
-    const SUPABASE_PUBLIC_KEY = 'sb_publishable_0iWZDk8NK0o3k09q1BFpbw_dqzwuhUn';
+    // ======================================================================
+    // BANCO DE DADOS: Google Sheets (via Google Apps Script)
+    // Cole aqui a URL do "App da Web" (termina em /exec) gerada ao implantar o Code.gs.
+    // ======================================================================
+    const GAS_URL = 'COLE_AQUI_A_URL_DO_WEB_APP';
+
+    // Itens com validade em até N dias aparecem como "Vencimento Próximo".
+    const ALERTA_DIAS_PROXIMO = 30;
 
     // Gere o SHA-256 das duas senhas com o arquivo GERAR_HASH_SENHAS.py.
     // Não coloque as senhas em texto puro neste arquivo público.
@@ -543,6 +554,8 @@
       WIJ: 'Itajaí'
     };
     const CHAVE_MODO_LOCAL = 'modoEntradaPreferido';
+    const FILA_KEY = 'filaMovimentacoesPendentes';
+    const DISPOSITIVO_KEY = 'idDispositivoEstoque';
 
     const DOM_CACHE = {
       readerContainer: null, reader: null, qrResult: null, status: null,
@@ -571,6 +584,9 @@
     let appData = { estoque: [], alertas: [], movimentacoes: [] };
     let dataCache = null, lastDataFetch = 0;
     const CACHE_DURATION = 3000;
+
+    // Linhas da planilha (unidade atual) mantidas em memória e no aparelho.
+    let linhasServidor = [];
 
     // NOVO: Carregamento sob demanda da biblioteca QR Code (Lazy Loading)
     async function carregarBibliotecaQR() {
@@ -626,6 +642,12 @@
       if (typeof err === 'string') return err;
       if (err.message) return err.message;
       return String(err);
+    }
+
+    function escapeHtml(valor) {
+      return String(valor ?? '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[c]));
     }
 
     function beep(duration = 80, frequency = 1200, volume = 0.4) {
@@ -788,7 +810,7 @@
       qrCodeCompleto = codigo;
       beep(80, 1200, 0.4);
       if (navigator.vibrate) navigator.vibrate(100);
-      DOM_CACHE.qrResult.innerHTML = `✔️ <strong style="color:var(--cor-sucesso)">Lido: ${resumoCodigo(codigo)}</strong>`;
+      DOM_CACHE.qrResult.innerHTML = `✔️ <strong style="color:var(--cor-sucesso)">Lido: ${escapeHtml(resumoCodigo(codigo))}</strong>`;
       DOM_CACHE.qrResult.classList.add('success');
       updateFocusIndicator('success');
       stopScanner();
@@ -976,8 +998,19 @@
       return UNIDADES[codigo] || codigo;
     }
 
+    // Chave do cache local com as linhas da planilha da unidade atual.
     function chaveCacheUnidade() {
-      return unidadeAtual ? `appDataCache:${unidadeAtual}` : 'appDataCache';
+      return unidadeAtual ? `linhasCache:${unidadeAtual}` : 'linhasCache';
+    }
+
+    function carregarLinhasCache() {
+      try { return JSON.parse(localStorage.getItem(chaveCacheUnidade()) || '[]'); }
+      catch { return []; }
+    }
+
+    function salvarLinhasCache() {
+      try { localStorage.setItem(chaveCacheUnidade(), JSON.stringify(linhasServidor)); }
+      catch (e) { console.warn('Cache local cheio:', e); }
     }
 
     async function sha256Hex(valor) {
@@ -1035,7 +1068,10 @@
       sincronizarModoAdmin();
       dataCache = null;
       lastDataFetch = 0;
-      localStorage.removeItem(chaveCacheUnidade());
+      // Mostra de imediato o que já está salvo neste aparelho para a unidade e atualiza em seguida.
+      linhasServidor = carregarLinhasCache();
+      Object.assign(appData, montarDados());
+      refreshActivePage();
       await carregarTodosOsDados(true);
       mostrarPagina('administracao');
       showToast(`Administração liberada para ${nomeUnidade()}.`, 'sucesso');
@@ -1072,15 +1108,16 @@
       const lote = document.getElementById('manual-lote').value.trim();
       const validade = document.getElementById('manual-validade').value.trim();
       if (!item || !lote || !validade) { showToast('Informe item, lote e validade.', 'erro'); return; }
+      if (!validadeValida(validade)) { showToast('Validade inválida. Use DD/MM/AAAA.', 'erro'); return; }
       qrCodeCompleto = `manual;${item};${lote};${validade}`;
-      DOM_CACHE.qrResult.innerHTML = `✔️ <strong style="color:var(--cor-sucesso)">Manual: ${item} / lote ${lote}</strong>`;
+      DOM_CACHE.qrResult.innerHTML = `✔️ <strong style="color:var(--cor-sucesso)">Manual: ${escapeHtml(item)} / lote ${escapeHtml(lote)}</strong>`;
       DOM_CACHE.qrResult.classList.add('success');
       processarEntradaAutomatica(qrCodeCompleto);
     }
 
     // Leitores HID podem enviar Enter, NumpadEnter, Tab ou nenhum terminador.
     // Também podem enviar o separador GS1 (ASCII 29), que precisa virar espaço
-    // para o parser SQL interpretar o mesmo código que a câmera interpreta.
+    // para o parser interpretar o mesmo código que a câmera interpreta.
     function normalizarCodigoDataMatrix(valor) {
       return String(valor || '')
         .replace(/^\](?:d2|C1|Q3|E0)\s*/i, '') // remove identificador de simbologia do scanner
@@ -1138,7 +1175,7 @@
       const codigo = normalizarCodigoDataMatrix(input.value);
       if (!codigo) return false;
       qrCodeCompleto = codigo;
-      DOM_CACHE.qrResult.innerHTML = `✔️ <strong style=\"color:var(--cor-sucesso)\">Lido: ${resumoCodigo(codigo)}</strong>`;
+      DOM_CACHE.qrResult.innerHTML = `✔️ <strong style="color:var(--cor-sucesso)">Lido: ${escapeHtml(resumoCodigo(codigo))}</strong>`;
       DOM_CACHE.qrResult.classList.add('success');
       input.value = '';
       beep(80, 1200, 0.4);
@@ -1175,12 +1212,6 @@
       agendarCapturaLeitor(event);
     }
 
-    function formatarValidadeBR(valor) {
-      const s = String(valor || '').slice(0, 10);
-      const partes = s.split('-');
-      return partes.length === 3 ? `${partes[2]}/${partes[1]}/${partes[0]}` : String(valor || '');
-    }
-
     function formatarDataHoraBR(valor) {
       if (!valor) return '';
       try {
@@ -1188,25 +1219,179 @@
       } catch { return String(valor); }
     }
 
-    async function supabaseRequest(path, options = {}) {
-      if (!SUPABASE_PUBLIC_KEY || SUPABASE_PUBLIC_KEY === 'COLE_AQUI_SUA_CHAVE_PUBLICA') {
-        throw new Error('Configure a publishable key do Supabase no index.html.');
+    // ======================================================================
+    // Datas
+    // ======================================================================
+    function validadeValida(br) {
+      if (!/^\d{2}\/\d{2}\/\d{4}$/.test(String(br || ''))) return false;
+      const [d, m, a] = br.split('/').map(Number);
+      const dt = new Date(a, m - 1, d);
+      return dt.getFullYear() === a && dt.getMonth() === m - 1 && dt.getDate() === d;
+    }
+
+    function parseValidadeBR(br) {
+      const [d, m, a] = String(br).split('/').map(Number);
+      return new Date(a, m - 1, d);
+    }
+
+    // ======================================================================
+    // Google Sheets (Apps Script): comunicação, fila offline e cálculo do estoque
+    // ======================================================================
+    function idDispositivo() {
+      let id = localStorage.getItem(DISPOSITIVO_KEY);
+      if (!id) {
+        id = 'DEV-' + Math.random().toString(36).slice(2, 8).toUpperCase();
+        localStorage.setItem(DISPOSITIVO_KEY, id);
       }
-      const response = await fetch(`${SUPABASE_REST_URL}${path}`, {
-        cache: 'no-store',
-        ...options,
-        headers: {
-          apikey: SUPABASE_PUBLIC_KEY,
-          Authorization: `Bearer ${SUPABASE_PUBLIC_KEY}`,
-          'Content-Type': 'application/json',
-          ...(options.headers || {})
+      return id;
+    }
+
+    async function gasFetch(url, options = {}, timeoutMs = 25000) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+      try {
+        const resp = await fetch(url, { cache: 'no-store', ...options, signal: ctrl.signal });
+        const body = await resp.json().catch(() => null);
+        if (!resp.ok || !body) throw new Error(`Google Sheets HTTP ${resp.status}`);
+        return body;
+      } catch (err) {
+        if (err.name === 'AbortError' || err instanceof TypeError) {
+          const e = new Error('Sem conexão com o Google Sheets.');
+          e.rede = true;
+          throw e;
+        }
+        throw err;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    function verificarConfigGas() {
+      if (!GAS_URL || GAS_URL.startsWith('COLE_AQUI')) {
+        throw new Error('Configure a GAS_URL (URL do App da Web) no index.html.');
+      }
+    }
+
+    async function gasGet(params) {
+      verificarConfigGas();
+      return gasFetch(`${GAS_URL}?${new URLSearchParams(params).toString()}`);
+    }
+
+    async function gasPost(body) {
+      verificarConfigGas();
+      // text/plain evita o preflight CORS do Apps Script.
+      return gasFetch(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(body)
+      });
+    }
+
+    // ---- Fila de entradas aguardando envio (funciona sem internet) ----
+    function lerFila() {
+      try { return JSON.parse(localStorage.getItem(FILA_KEY) || '[]'); }
+      catch { return []; }
+    }
+
+    function gravarFila(fila) {
+      localStorage.setItem(FILA_KEY, JSON.stringify(fila));
+      atualizarBannerFila();
+    }
+
+    function atualizarBannerFila() {
+      const el = document.getElementById('sync-banner');
+      if (!el) return;
+      const n = lerFila().length;
+      el.style.display = n ? 'block' : 'none';
+      el.textContent = n ? `⏳ ${n} entrada(s) aguardando envio para o Google Sheets` : '';
+    }
+
+    let enviandoFila = false;
+
+    // Retorna true se enviou algo com sucesso.
+    async function enviarFila() {
+      if (enviandoFila) return false;
+      const lote = lerFila();
+      if (!lote.length) return false;
+      enviandoFila = true;
+      try {
+        const res = await gasPost({ action: 'registrarLote', itens: lote });
+        if (res.status !== 'sucesso') throw new Error(res.mensagem || 'Falha ao enviar.');
+        const enviadas = new Set(lote.map(m => m.chave));
+        gravarFila(lerFila().filter(m => !enviadas.has(m.chave)));
+        if (res.recusadas?.length) {
+          showToast(`${res.recusadas.length} registro(s) recusado(s) pela planilha.`, 'erro');
+        }
+        return true;
+      } catch (err) {
+        console.warn('Fila não enviada (será tentada de novo):', normalizeError(err));
+        return false;
+      } finally {
+        enviandoFila = false;
+      }
+    }
+
+    function enviarFilaEAtualizar() {
+      enviarFila().then(ok => { if (ok && unidadeAtual) carregarTodosOsDados(true); });
+    }
+
+    // ---- Calcula estoque, alertas e histórico a partir das linhas da planilha ----
+    function montarDados() {
+      const pendentes = lerFila().filter(m => m.unidade === unidadeAtual);
+      const chaves = new Set(linhasServidor.map(r => r.k));
+      const todas = linhasServidor.concat(
+        pendentes.filter(m => !chaves.has(m.chave)).map(m => ({
+          k: m.chave, i: m.dataHora, t: m.tipo, it: m.item, l: m.lote, v: m.validade, q: m.quantidade, pendente: true
+        }))
+      );
+
+      const mapa = new Map();
+      todas.forEach(r => {
+        const chave = [r.it, r.l, r.v].join('|');
+        const sinal = r.t === 'Saída' ? -1 : 1;
+        if (!mapa.has(chave)) mapa.set(chave, { item: r.it, lote: r.l, validade: r.v, total: 0, minimo: 0 });
+        mapa.get(chave).total += sinal * (Number(r.q) || 0);
+      });
+
+      const estoque = [...mapa.values()]
+        .filter(x => x.total > 0)
+        .sort((a, b) =>
+          String(a.item).localeCompare(String(b.item), 'pt-BR', { numeric: true }) ||
+          (validadeValida(a.validade) && validadeValida(b.validade)
+            ? parseValidadeBR(a.validade) - parseValidadeBR(b.validade) : 0)
+        );
+
+      const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+      const alertas = [];
+      estoque.forEach(x => {
+        if (!validadeValida(x.validade)) return;
+        const dias = Math.round((parseValidadeBR(x.validade) - hoje) / 86400000);
+        const descricao = `Item ${x.item} · Lote ${x.lote}`;
+        if (dias < 0) {
+          alertas.push({ tipo: 'Vencido', descricao, dias,
+            detalhe: `Venceu em ${x.validade} (há ${Math.abs(dias)} dia(s)) · Qtd em estoque: ${x.total}` });
+        } else if (dias <= ALERTA_DIAS_PROXIMO) {
+          alertas.push({ tipo: 'Vencimento Próximo', descricao, dias,
+            detalhe: `${dias === 0 ? 'Vence hoje' : `Vence em ${x.validade} (${dias} dia(s))`} · Qtd em estoque: ${x.total}` });
         }
       });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(body.message || body.error_description || body.error || body.hint || `Supabase HTTP ${response.status}`);
-      }
-      return body;
+      alertas.sort((a, b) => a.dias - b.dias);
+
+      const movimentacoes = todas
+        .slice()
+        .sort((a, b) => String(b.i).localeCompare(String(a.i)))
+        .slice(0, 100)
+        .map(r => ({
+          dataHora: formatarDataHoraBR(r.i),
+          tipo: r.t,
+          item: r.it,
+          lote: r.l,
+          validade: r.v,
+          qtd: r.q,
+          pendente: !!r.pendente
+        }));
+
+      return { estoque, alertas, movimentacoes };
     }
 
     async function apiGet(action) {
@@ -1227,39 +1412,15 @@
       if (action !== 'obter') throw new Error(`Ação GET não suportada: ${action}`);
 
       if (!unidadeAtual) throw new Error('Entre na Administração com a senha da unidade.');
-      const filtroUnidade = encodeURIComponent(unidadeAtual);
-      const [estoqueRows, alertaRows, movimentacaoRows] = await Promise.all([
-        supabaseRequest(`/estoque_resumo_unidade?unidade_codigo=eq.${filtroUnidade}&select=item,lote,validade,total,minimo&order=item.asc`),
-        supabaseRequest(`/alertas_estoque_unidade?unidade_codigo=eq.${filtroUnidade}&select=tipo,descricao,detalhe,dias`),
-        supabaseRequest(`/movimentacoes_unidade?unidade_codigo=eq.${filtroUnidade}&select=data_hora,tipo,item,lote,validade,quantidade&order=data_hora.desc&limit=100`)
-      ]);
 
-      return {
-        status: 'sucesso',
-        dados: {
-          estoque: (estoqueRows || []).map(item => ({
-            item: item.item,
-            lote: item.lote || '',
-            validade: item.validade || '',
-            total: item.total,
-            minimo: item.minimo || 0
-          })),
-          alertas: (alertaRows || []).map(item => ({
-            tipo: item.tipo,
-            descricao: item.descricao || '',
-            detalhe: item.detalhe || '',
-            dias: item.dias
-          })),
-          movimentacoes: (movimentacaoRows || []).map(mov => ({
-            dataHora: formatarDataHoraBR(mov.data_hora),
-            tipo: mov.tipo,
-            item: mov.item,
-            lote: mov.lote,
-            validade: formatarValidadeBR(mov.validade),
-            qtd: mov.quantidade
-          }))
-        }
-      };
+      if (lerFila().length) await enviarFila();
+
+      const res = await gasGet({ action: 'listar', unidade: unidadeAtual });
+      if (res.status !== 'sucesso') throw new Error(res.mensagem || 'Erro ao ler a planilha.');
+      linhasServidor = res.rows || [];
+      salvarLinhasCache();
+
+      return { status: 'sucesso', dados: montarDados() };
     }
 
     async function apiPost(payload) {
@@ -1267,16 +1428,32 @@
         if (!unidadeAtual) {
           throw new Error('Este dispositivo ainda não foi vinculado a JGS ou WIJ. Abra Administração e use a senha da unidade.');
         }
-        return await supabaseRequest('/rpc/registrar_movimentacao', {
-          method: 'POST',
-          body: JSON.stringify({
-            p_tipo: payload.tipo,
-            p_codigo: payload.qrCodeCompleto,
-            p_quantidade: Number(payload.quantidade),
-            p_chave_requisicao: payload.chaveRequisicao || gerarChaveUnica(),
-            p_unidade_codigo: unidadeAtual
-          })
-        });
+        const campos = extrairCamposCodigo(payload.qrCodeCompleto);
+        if (!campos.item) return { status: 'erro', mensagem: 'Código não reconhecido: item não encontrado. Tente ler novamente.' };
+        if (!campos.lote) return { status: 'erro', mensagem: 'Código não reconhecido: lote não encontrado. Tente ler novamente.' };
+        if (!validadeValida(campos.validade)) return { status: 'erro', mensagem: 'Código não reconhecido: validade inválida. Tente ler novamente.' };
+
+        // Grava primeiro no aparelho (instantâneo e seguro sem internet) e envia em segundo plano.
+        const fila = lerFila();
+        if (!fila.some(m => m.chave === payload.chaveRequisicao)) {
+          fila.push({
+            chave: payload.chaveRequisicao,
+            unidade: unidadeAtual,
+            tipo: payload.tipo,
+            item: campos.item,
+            lote: campos.lote,
+            validade: campos.validade,
+            quantidade: Number(payload.quantidade) || 1,
+            dispositivo: idDispositivo(),
+            dataHora: new Date().toISOString()
+          });
+          gravarFila(fila);
+        }
+        Object.assign(appData, montarDados());
+        refreshActivePage();
+        enviarFilaEAtualizar();
+
+        return { status: 'sucesso', mensagem: `Entrada registrada: item ${campos.item} · lote ${campos.lote}` };
       }
 
       if (payload.action === 'configurarModo') {
@@ -1289,14 +1466,19 @@
       }
 
       if (payload.action === 'limparEstoque') {
-        return await supabaseRequest('/rpc/limpar_unidade', {
-          method: 'POST',
-          body: JSON.stringify({
-            p_unidade_codigo: payload.unidadeCodigo,
-            p_confirmacao: payload.confirmacao,
-            p_senha: payload.senha
-          })
+        await enviarFila(); // não deixa entradas pendentes caírem depois da limpeza
+        const res = await gasPost({
+          action: 'limpar',
+          unidade: payload.unidadeCodigo,
+          confirmacao: payload.confirmacao,
+          senha: payload.senha
         });
+        if (res.status === 'sucesso') {
+          gravarFila(lerFila().filter(m => m.unidade !== payload.unidadeCodigo));
+          linhasServidor = [];
+          salvarLinhasCache();
+        }
+        return res;
       }
 
       throw new Error(`Ação POST não suportada: ${payload.action}`);
@@ -1390,7 +1572,7 @@
         statusDiv.innerText = res.mensagem;
         statusDiv.className = res.status === 'sucesso' ? 'status-sucesso' : 'status-erro';
         if (res.status === 'sucesso') {
-          showToast(res.mensagem, "sucesso");
+          showToast(escapeHtml(res.mensagem), "sucesso");
           if (autoTorchEnabled && flashOn) await turnOffTorchAutomatically();
           dataCache = null; lastDataFetch = 0;
           setTimeout(() => { 
@@ -1398,17 +1580,18 @@
             if (modoEntradaAtual === 'auto' || modoEntradaAtual === 'camera') startScannerWithDevice(); 
             else if (modoEntradaAtual === 'leitor') document.getElementById('codigo-leitor')?.focus(); 
           }, 600);
-          await carregarTodosOsDados(true);
         } else { 
-          showToast(res.mensagem, "erro"); 
-          liberarBotoes(); 
-          registroEmProgresso = false; 
+          showToast(escapeHtml(res.mensagem), "erro"); 
+          // Leitura inválida: libera para uma nova tentativa.
+          setTimeout(() => {
+            resetarFormulario();
+            if (modoEntradaAtual === 'auto' || modoEntradaAtual === 'camera') startScannerWithDevice();
+          }, 1200);
         }
       } catch (err) {
         const detalhe = normalizeError(err);
         statusDiv.innerText = 'Erro: ' + detalhe;
         statusDiv.className = 'status-erro';
-        // Não esconder erro do parser/banco atrás de uma mensagem falsa de conexão.
         showToast('Falha ao registrar. Veja a mensagem na tela.', "erro");
         liberarBotoes();
         registroEmProgresso = false;
@@ -1447,7 +1630,7 @@
         return;
       }
 
-      // OTIMIZAÇÃO: Só mostra overlay travando a tela se for a primeira abertura absoluta (sem dados em cache)
+      // Só trava a tela com o overlay na primeira abertura absoluta (sem dados locais).
       if (!isUpdate && appData.estoque.length === 0) {
         overlay.style.display = 'flex';
       }
@@ -1456,16 +1639,14 @@
         const res = await apiGet('obter');
         if (res.status === 'sucesso') {
           dataCache = res.dados; 
-          lastDataFetch = agora;
+          lastDataFetch = Date.now();
           Object.assign(appData, res.dados);
-          // Salva no localStorage para abertura instantânea na próxima vez
-          localStorage.setItem(chaveCacheUnidade(), JSON.stringify(res.dados));
           refreshActivePage();
         } else { throw new Error(res.mensagem); }
       } catch (err) {
         console.warn('Erro ao carregar dados:', err);
         if (appData.estoque.length === 0) {
-          showToast('Erro ao carregar dados: ' + normalizeError(err), "erro");
+          showToast('Erro ao carregar dados: ' + escapeHtml(normalizeError(err)), "erro");
         }
       } finally { 
         overlay.style.display = 'none'; 
@@ -1482,7 +1663,7 @@
       const tbody = document.getElementById('corpo-tabela-estoque');
       if (!appData.estoque?.length) { tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color: var(--cor-texto-claro)">Nenhum item encontrado.</td></tr>'; return; }
       tbody.innerHTML = appData.estoque.map(item =>
-        `<tr><td data-label="Item">${item.item}</td><td data-label="Lote">${item.lote||''}</td><td data-label="Validade">${item.validade||''}</td><td data-label="Total"><strong>${item.total}</strong></td></tr>`
+        `<tr><td data-label="Item">${escapeHtml(item.item)}</td><td data-label="Lote">${escapeHtml(item.lote||'')}</td><td data-label="Validade">${escapeHtml(item.validade||'')}</td><td data-label="Total"><strong>${escapeHtml(item.total)}</strong></td></tr>`
       ).join('');
     }
 
@@ -1491,7 +1672,7 @@
       if (!appData.alertas?.length) { lista.innerHTML = '<li style="text-align:center; color: var(--cor-texto-claro)">🎉 Nenhum alerta no momento.</li>'; return; }
       lista.innerHTML = appData.alertas.map(item => {
         const cl = item.tipo === 'Vencido' ? 'alert-vencido' : (item.tipo === 'Vencimento Próximo' ? 'alert-proximo' : '');
-        return `<li class="${cl}"><strong>${item.tipo}</strong><br/>${item.descricao||''}<br/><small>${item.detalhe||''}</small></li>`;
+        return `<li class="${cl}"><strong>${escapeHtml(item.tipo)}</strong><br/>${escapeHtml(item.descricao||'')}<br/><small>${escapeHtml(item.detalhe||'')}</small></li>`;
       }).join('');
     }
 
@@ -1499,7 +1680,7 @@
       const tbody = document.getElementById('corpo-tabela-movimentacoes');
       if (!appData.movimentacoes?.length) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--cor-texto-claro)">Nenhuma movimentação encontrada.</td></tr>'; return; }
       tbody.innerHTML = appData.movimentacoes.map(mov =>
-        `<tr><td data-label="Data">${mov.dataHora}</td><td data-label="Tipo" class="${mov.tipo==='Entrada'?'tipo-entrada':'tipo-saida'}">${mov.tipo}</td><td data-label="Item">${mov.item}</td><td data-label="Lote">${mov.lote}</td><td data-label="Validade">${mov.validade}</td><td data-label="Qtd">${mov.qtd}</td></tr>`
+        `<tr><td data-label="Data">${escapeHtml(mov.dataHora)}</td><td data-label="Tipo" class="${mov.tipo==='Entrada'?'tipo-entrada':'tipo-saida'}">${escapeHtml(mov.tipo)}${mov.pendente ? ' ⏳' : ''}</td><td data-label="Item">${escapeHtml(mov.item)}</td><td data-label="Lote">${escapeHtml(mov.lote)}</td><td data-label="Validade">${escapeHtml(mov.validade)}</td><td data-label="Qtd">${escapeHtml(mov.qtd)}</td></tr>`
       ).join('');
     }
 
@@ -1566,16 +1747,15 @@
           senha
         });
         if (res.status === 'sucesso') {
-          showToast(res.mensagem || `Dados de ${nomeUnidade()} apagados.`, 'sucesso');
+          showToast(escapeHtml(res.mensagem || `Dados de ${nomeUnidade()} apagados.`), 'sucesso');
           dataCache = null;
           lastDataFetch = 0;
-          localStorage.removeItem(chaveCacheUnidade());
           await carregarTodosOsDados(true);
         } else {
-          showToast(res.mensagem || 'O Supabase recusou a limpeza.', 'erro');
+          showToast(escapeHtml(res.mensagem || 'A planilha recusou a limpeza.'), 'erro');
         }
       } catch (err) {
-        showToast('Erro ao limpar dados: ' + normalizeError(err), 'erro');
+        showToast('Erro ao limpar dados: ' + escapeHtml(normalizeError(err)), 'erro');
       } finally {
         DOM_CACHE.loadingOverlay.style.display = 'none';
         DOM_CACHE.loadingOverlay.querySelector('span').textContent = 'Sincronizando dados...';
@@ -1586,24 +1766,34 @@
       if (e.key === 'Enter') validarLoginAdmin();
     });
 
-    // OTIMIZAÇÃO: Usa DOMContentLoaded em vez de 'load' para renderizar a interface instantaneamente
+    // Usa DOMContentLoaded em vez de 'load' para renderizar a interface instantaneamente
     window.addEventListener('DOMContentLoaded', () => { 
       detectDeviceType();
       initDOMCache();
-      
-      // Carrega dados do cache local instantaneamente para não mostrar tela em branco
-      const cachedData = unidadeAtual ? localStorage.getItem(chaveCacheUnidade()) : null;
-      if (cachedData) {
-        try {
-          Object.assign(appData, JSON.parse(cachedData));
-          refreshActivePage();
-        } catch(e) { console.warn('Erro ao ler cache', e); }
+      atualizarBannerFila();
+
+      // Mostra instantaneamente o que está salvo no aparelho para não deixar a tela em branco.
+      if (unidadeAtual) {
+        linhasServidor = carregarLinhasCache();
+        Object.assign(appData, montarDados());
+        refreshActivePage();
       }
       
       carregarConfiguracaoEntrada();
       if (unidadeAtual) {
-        carregarTodosOsDados(); // Busca dados frescos em segundo plano
+        carregarTodosOsDados(); // Busca dados frescos da planilha em segundo plano
       }
+      enviarFilaEAtualizar();   // Envia o que ficou pendente de uso anterior
+
+      window.addEventListener('online', enviarFilaEAtualizar);
+
+      // A cada 60 s: reenvia pendências e atualiza a lista (exceto enquanto registra).
+      setInterval(() => {
+        if (document.visibilityState !== 'visible') return;
+        if (lerFila().length) { enviarFilaEAtualizar(); return; }
+        const registrando = document.getElementById('page-registrar')?.classList.contains('active');
+        if (unidadeAtual && !registrando && !registroEmProgresso) carregarTodosOsDados(true);
+      }, 60000);
       
       if (window.AndroidBridge?.onCameraReady) window.AndroidBridge.onCameraReady();
     });
