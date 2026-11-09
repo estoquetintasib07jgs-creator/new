@@ -11,8 +11,8 @@
  */
 const SheetsDB = (() => {
   // ====== CONFIGURE AQUI ======
-  const URL_WEBAPP = 'COLE_AQUI_A_URL_DO_WEB_APP';   // termina em /exec
-  const TOKEN = 'TROQUE_POR_UM_TOKEN_SEU_123';       // igual ao Code.gs
+  const URL_WEBAPP = 'https://script.google.com/macros/s/AKfycbzU0-IUZpduPdO1ounu1np3iDC8d8k7v0cryFRUwX5bVNi2Zj7Wh21XJrXU4oxZE9C17A/exec';   // termina em /exec
+  const TOKEN = 'W1e2g3wij';       // igual ao Code.gs
   const INTERVALO_SYNC_MS = 15000;
   // ============================
 
