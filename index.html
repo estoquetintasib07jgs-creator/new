@@ -358,24 +358,6 @@
     <span style="font-weight: 600; color: var(--cor-texto-secundario);">Sincronizando dados...</span>
   </div>
 
-  <div id="modal-login-admin" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="titulo-login-admin">
-    <div class="modal-content">
-      <div class="modal-header" id="titulo-login-admin" style="color:var(--cor-primaria)">🔐 Administração</div>
-      <div class="modal-body">
-        <p>Digite a senha de administrador para acessar as configurações.</p>
-        <div class="input-group" style="margin-top:16px">
-          <label for="login-senha-admin">Senha de administrador</label>
-          <input type="password" id="login-senha-admin" autocomplete="current-password" placeholder="Digite sua senha" style="text-align:center">
-        </div>
-        <div id="login-admin-erro" role="alert" style="display:none;color:var(--cor-perigo);font-weight:600;margin-bottom:12px">Senha incorreta.</div>
-      </div>
-      <div class="modal-actions">
-        <button class="btn-confirmar" style="background:var(--cor-primaria)" onclick="validarLoginAdmin()">Entrar</button>
-        <button class="btn-cancelar" onclick="fecharLoginAdmin()">Cancelar</button>
-      </div>
-    </div>
-  </div>
-
   <div id="modal-vencido" class="modal-overlay">
     <div class="modal-content">
       <div class="modal-header">⚠️ Atenção: Item Vencido</div>
@@ -400,9 +382,8 @@
     <div class="modal-content">
       <div class="modal-header">🔒 Limpar unidade</div>
       <div class="modal-body">
-        <p>Esta ação irá apagar os dados da unidade <strong id="modal-unidade">atual</strong>.</p>
-        <p>Os dados da outra unidade não serão apagados.</p>
-        <p>Digite novamente a senha deste perfil para confirmar:</p>
+        <p>Esta ação irá apagar <strong>todos os dados</strong> de <strong id="modal-unidade">Itajaí</strong>.</p>
+        <p>Digite a senha para confirmar:</p>
         <div class="input-group" style="margin-top: 15px;">
           <input type="password" id="senha-admin" placeholder="Digite a mesma senha" autocomplete="current-password" style="text-align:center; letter-spacing: 4px;" />
         </div>
@@ -501,16 +482,16 @@
               <option value="leitor">Leitor sem fio Bluetooth/USB</option>
             </select>
             <button class="admin-primary" type="button" onclick="salvarModoAdmin()">💾 Salvar modo de leitura</button>
-            <p class="admin-note">A alteração vale somente para a unidade autenticada e fica salva neste dispositivo.</p>
+            <p class="admin-note">A alteração fica salva neste dispositivo.</p>
           </div>
 
           <div class="admin-option" style="margin-bottom:18px;border-color:#f3b1b1;background:#fff8f8">
             <label style="color:var(--cor-perigo)">Limpar dados da conferência desta unidade</label>
-            <p class="admin-note" style="color:#8d3030">A ação apagará as movimentações somente de <strong id="unidade-limpeza-admin"></strong>. A outra unidade não será alterada. Exporte o Excel antes de confirmar.</p>
+            <p class="admin-note" style="color:#8d3030">A ação apagará todas as movimentações de <strong id="unidade-limpeza-admin"></strong> e não pode ser desfeita. Se precisar, faça uma cópia da planilha antes.</p>
             <button class="admin-secondary" type="button" style="border-color:var(--cor-perigo);color:var(--cor-perigo)" onclick="abrirModalSenha()">🗑️ Limpar dados desta unidade</button>
           </div>
 
-          <button class="admin-secondary" type="button" onclick="sairAdministracao()">Sair do perfil de administração</button>
+          <button class="admin-secondary" type="button" onclick="sairAdministracao()">Voltar ao estoque</button>
           <p class="admin-credit">Desenvolvido por <a href="mailto:Denilsons@weg.net">Denilsons@weg.net</a></p>
         </div>
       </div>
@@ -537,7 +518,7 @@
     // BANCO DE DADOS: Google Sheets (via Google Apps Script)
     // Cole aqui a URL do "App da Web" (termina em /exec) gerada ao implantar o Code.gs.
     // ======================================================================
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbxwEXa0K6P09Psb8H8XySJEQAgI5KG0-ESgIsH3IT2m9OWzVHW_zZ5b-YbXA8FgLd8yTA/exec';
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbxyhV8brfaA5UKV3JUdq1NyEKwuWoB_fTsAT3xWVngn-8fMrHiogXWk0t8ezW7O_m_BoQ/exec';
 
     // Itens com validade em até N dias aparecem como "Vencimento Próximo".
     const ALERTA_DIAS_PROXIMO = 30;
@@ -545,12 +526,10 @@
     // Gere o SHA-256 das duas senhas com o arquivo GERAR_HASH_SENHAS.py.
     // Não coloque as senhas em texto puro neste arquivo público.
     const ADMIN_PASSWORD_HASHES = {
-      JGS: '04a50d3de65cdf5a2bf701fa796e2d2104b4bdad6bde2b66d8e6ace21895521e',
       WIJ: '811c708cf72088ebdab6582712945d18450eb9a629701ce44d03ed4c8f8c1c5d'
     };
 
     const UNIDADES = {
-      JGS: 'Jaraguá do Sul',
       WIJ: 'Itajaí'
     };
     const CHAVE_MODO_LOCAL = 'modoEntradaPreferido';
@@ -573,9 +552,9 @@
     let focusIntervalId = null;
     let torchMethod = null, torchSupported = null;
     let modoEntradaAtual = 'auto';
-    // O primeiro uso do dispositivo precisa ser configurado com uma senha.
-    // Depois disso, o operador comum pode trabalhar sem nova senha.
-    let unidadeAtual = localStorage.getItem('unidadeSelecionada') || null;
+    // Unidade única: o site entra direto em Itajaí (WIJ), sem pedir senha.
+    // A senha só é pedida para APAGAR os dados.
+    let unidadeAtual = 'WIJ';
     let qrLibraryLoaded = false;
     let leitorCapturaTimer = null;
     const LEITOR_MIN_CHARS = 18; // evita finalizar um texto curto digitado manualmente por engano
@@ -1032,49 +1011,8 @@
     let adminAutenticado = false;
 
     function abrirAdministracao() {
-      if (adminAutenticado && unidadeAtual) {
-        sincronizarModoAdmin();
-        mostrarPagina('administracao');
-        return;
-      }
-      document.getElementById('login-admin-erro').style.display = 'none';
-      document.getElementById('login-senha-admin').value = '';
-      document.getElementById('modal-login-admin').classList.add('active');
-      setTimeout(() => document.getElementById('login-senha-admin').focus(), 80);
-    }
-
-    function fecharLoginAdmin() {
-      document.getElementById('modal-login-admin').classList.remove('active');
-      document.getElementById('login-senha-admin').value = '';
-    }
-
-    async function validarLoginAdmin() {
-      const campo = document.getElementById('login-senha-admin');
-      const erro = document.getElementById('login-admin-erro');
-      const codigo = await identificarUnidadePorSenha(campo.value);
-
-      if (!codigo) {
-        erro.textContent = 'Senha incorreta ou senhas ainda não configuradas.';
-        erro.style.display = 'block';
-        campo.value = '';
-        return;
-      }
-
-      unidadeAtual = codigo;
-      adminAutenticado = true;
-      sessionStorage.setItem('unidadeAdmin', unidadeAtual);
-      localStorage.setItem('unidadeSelecionada', unidadeAtual);
-      fecharLoginAdmin();
       sincronizarModoAdmin();
-      dataCache = null;
-      lastDataFetch = 0;
-      // Mostra de imediato o que já está salvo neste aparelho para a unidade e atualiza em seguida.
-      linhasServidor = carregarLinhasCache();
-      Object.assign(appData, montarDados());
-      refreshActivePage();
-      await carregarTodosOsDados(true);
       mostrarPagina('administracao');
-      showToast(`Administração liberada para ${nomeUnidade()}.`, 'sucesso');
     }
 
     function sincronizarModoAdmin() {
@@ -1085,10 +1023,6 @@
     }
 
     function salvarModoAdmin() {
-      if (!adminAutenticado || !unidadeAtual) {
-        showToast('Entre com a senha da unidade antes de alterar o modo.', 'erro');
-        return;
-      }
       const modo = document.getElementById('modo-admin').value;
       aplicarModoUI(modo);
       localStorage.setItem(`${CHAVE_MODO_LOCAL}:${unidadeAtual}`, modo);
@@ -1096,11 +1030,7 @@
     }
 
     function sairAdministracao() {
-      adminAutenticado = false;
-      sessionStorage.removeItem('unidadeAdmin');
-      if (document.getElementById('page-administracao').classList.contains('active')) {
-        mostrarPagina('estoque');
-      }
+      mostrarPagina('estoque');
     }
 
     function prepararEntradaManual() {
@@ -1337,7 +1267,7 @@
 
     // ---- Calcula estoque, alertas e histórico a partir das linhas da planilha ----
     function montarDados() {
-      const pendentes = lerFila().filter(m => m.unidade === unidadeAtual);
+      const pendentes = lerFila();
       const chaves = new Set(linhasServidor.map(r => r.k));
       const todas = linhasServidor.concat(
         pendentes.filter(m => !chaves.has(m.chave)).map(m => ({
@@ -1426,7 +1356,7 @@
     async function apiPost(payload) {
       if (payload.action === 'registrar') {
         if (!unidadeAtual) {
-          throw new Error('Este dispositivo ainda não foi vinculado a JGS ou WIJ. Abra Administração e use a senha da unidade.');
+          throw new Error('Unidade não definida.');
         }
         const campos = extrairCamposCodigo(payload.qrCodeCompleto);
         if (!campos.item) return { status: 'erro', mensagem: 'Código não reconhecido: item não encontrado. Tente ler novamente.' };
@@ -1474,7 +1404,7 @@
           senha: payload.senha
         });
         if (res.status === 'sucesso') {
-          gravarFila(lerFila().filter(m => m.unidade !== payload.unidadeCodigo));
+          gravarFila([]);
           linhasServidor = [];
           salvarLinhasCache();
         }
@@ -1709,10 +1639,6 @@
     }
 
     function abrirModalSenha() {
-      if (!adminAutenticado || !unidadeAtual) {
-        showToast('Entre com a senha da unidade antes de limpar dados.', 'erro');
-        return;
-      }
       document.getElementById('modal-unidade').textContent = nomeUnidade();
       document.getElementById('senha-admin').value = '';
       document.getElementById('modal-senha').classList.add('active');
@@ -1728,7 +1654,7 @@
       const senha = document.getElementById('senha-admin').value;
       const codigoConfirmado = await identificarUnidadePorSenha(senha);
       if (codigoConfirmado !== unidadeAtual) {
-        showToast('A senha não pertence à unidade atualmente autenticada.', 'erro');
+        showToast('Senha incorreta.', 'erro');
         document.getElementById('senha-admin').value = '';
         return;
       }
@@ -1761,10 +1687,6 @@
         DOM_CACHE.loadingOverlay.querySelector('span').textContent = 'Sincronizando dados...';
       }
     }
-
-    document.getElementById('login-senha-admin')?.addEventListener('keydown', e => {
-      if (e.key === 'Enter') validarLoginAdmin();
-    });
 
     // Usa DOMContentLoaded em vez de 'load' para renderizar a interface instantaneamente
     window.addEventListener('DOMContentLoaded', () => { 
