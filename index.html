@@ -1374,6 +1374,7 @@
             lote: campos.lote,
             validade: campos.validade,
             quantidade: Number(payload.quantidade) || 1,
+            codigo: normalizarCodigoDataMatrix(payload.qrCodeCompleto),
             dispositivo: idDispositivo(),
             dataHora: new Date().toISOString()
           });
