@@ -264,9 +264,6 @@
     .styled-table strong { color: var(--cor-primaria); font-weight: 700; }
     .tipo-entrada { color: var(--cor-sucesso); font-weight: 700; }
     .tipo-saida { color: var(--cor-perigo); font-weight: 700; }
-    .grupo-cab td { background: #eef6ff; font-weight: 700; color: var(--cor-primaria); border-top: 1px solid var(--borda); }
-    .grupo-filho td { background: #fcfdff; }
-    .grupo-filho td:first-child { border-left: 4px solid #cfe5fa; }
 
     .alert-list { list-style: none; display: flex; flex-direction: column; gap: 12px; }
     .alert-list li { padding: 16px; border-radius: var(--radius-md); border-left: 5px solid #ccc; background: #f8f9fa; font-size: 0.95rem; line-height: 1.5; }
@@ -365,7 +362,7 @@
     <div class="modal-content">
       <div class="modal-header" id="titulo-login-admin" style="color:var(--cor-primaria)">🔐 Administração</div>
       <div class="modal-body">
-        <p id="texto-login-admin">Digite a senha de administrador para acessar as configurações.</p>
+        <p>Digite a senha de administrador para acessar as configurações.</p>
         <div class="input-group" style="margin-top:16px">
           <label for="login-senha-admin">Senha de administrador</label>
           <input type="password" id="login-senha-admin" autocomplete="current-password" placeholder="Digite sua senha" style="text-align:center">
@@ -1033,8 +1030,6 @@
     }
 
     let adminAutenticado = false;
-    let vinculoInicial = false; // true quando o aparelho ainda não tem unidade e pedimos a senha ao abrir
-    const MSG_SEM_UNIDADE = 'Este dispositivo ainda não está vinculado a uma unidade. Toque em ⚙️ Admin e digite a senha da unidade.';
 
     function abrirAdministracao() {
       if (adminAutenticado && unidadeAtual) {
@@ -1042,19 +1037,6 @@
         mostrarPagina('administracao');
         return;
       }
-      vinculoInicial = false;
-      document.getElementById('texto-login-admin').textContent = 'Digite a senha de administrador para acessar as configurações.';
-      document.getElementById('login-admin-erro').style.display = 'none';
-      document.getElementById('login-senha-admin').value = '';
-      document.getElementById('modal-login-admin').classList.add('active');
-      setTimeout(() => document.getElementById('login-senha-admin').focus(), 80);
-    }
-
-    // Aparelho sem unidade (ex.: computador novo): pede a senha da unidade ao abrir o site.
-    function pedirVinculoUnidade() {
-      vinculoInicial = true;
-      document.getElementById('texto-login-admin').textContent =
-        'Este dispositivo ainda não está vinculado a uma unidade. Digite a senha da unidade (JGS ou WIJ) para carregar o estoque.';
       document.getElementById('login-admin-erro').style.display = 'none';
       document.getElementById('login-senha-admin').value = '';
       document.getElementById('modal-login-admin').classList.add('active');
@@ -1091,16 +1073,8 @@
       Object.assign(appData, montarDados());
       refreshActivePage();
       await carregarTodosOsDados(true);
-      if (vinculoInicial) {
-        vinculoInicial = false;
-        adminAutenticado = false;
-        sessionStorage.removeItem('unidadeAdmin');
-        mostrarPagina('estoque');
-        showToast(`Dispositivo vinculado a ${nomeUnidade()}.`, 'sucesso');
-      } else {
-        mostrarPagina('administracao');
-        showToast(`Administração liberada para ${nomeUnidade()}.`, 'sucesso');
-      }
+      mostrarPagina('administracao');
+      showToast(`Administração liberada para ${nomeUnidade()}.`, 'sucesso');
     }
 
     function sincronizarModoAdmin() {
@@ -1687,37 +1661,14 @@
 
     function renderizarEstoque() {
       const tbody = document.getElementById('corpo-tabela-estoque');
-      if (!unidadeAtual) { tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color: var(--cor-texto-claro)">${MSG_SEM_UNIDADE}</td></tr>`; return; }
       if (!appData.estoque?.length) { tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color: var(--cor-texto-claro)">Nenhum item encontrado.</td></tr>'; return; }
-
-      // Agrupa por item. Um lote só: uma linha. Vários lotes: linha do item com o total + uma linha por lote/validade.
-      const grupos = new Map();
-      appData.estoque.forEach(x => {
-        const k = String(x.item);
-        if (!grupos.has(k)) grupos.set(k, []);
-        grupos.get(k).push(x);
-      });
-
-      let html = '';
-      grupos.forEach((lotes, item) => {
-        const g = escapeHtml(item);
-        if (lotes.length === 1) {
-          const x = lotes[0];
-          html += `<tr data-grupo="${g}"><td data-label="Item">${g}</td><td data-label="Lote">${escapeHtml(x.lote || '')}</td><td data-label="Validade">${escapeHtml(x.validade || '')}</td><td data-label="Total"><strong>${escapeHtml(x.total)}</strong></td></tr>`;
-        } else {
-          const soma = lotes.reduce((s, x) => s + (Number(x.total) || 0), 0);
-          html += `<tr class="grupo-cab" data-grupo="${g}"><td data-label="Item">${g}</td><td colspan="2">Total do item · ${lotes.length} lotes</td><td data-label="Total"><strong>${soma}</strong></td></tr>`;
-          lotes.forEach(x => {
-            html += `<tr class="grupo-filho" data-grupo="${g}"><td></td><td data-label="Lote">${escapeHtml(x.lote || '')}</td><td data-label="Validade">${escapeHtml(x.validade || '')}</td><td data-label="Total">${escapeHtml(x.total)}</td></tr>`;
-          });
-        }
-      });
-      tbody.innerHTML = html;
+      tbody.innerHTML = appData.estoque.map(item =>
+        `<tr><td data-label="Item">${escapeHtml(item.item)}</td><td data-label="Lote">${escapeHtml(item.lote||'')}</td><td data-label="Validade">${escapeHtml(item.validade||'')}</td><td data-label="Total"><strong>${escapeHtml(item.total)}</strong></td></tr>`
+      ).join('');
     }
 
     function renderizarAlertas() {
       const lista = document.getElementById('lista-alertas');
-      if (!unidadeAtual) { lista.innerHTML = `<li style="text-align:center; color: var(--cor-texto-claro)">${MSG_SEM_UNIDADE}</li>`; return; }
       if (!appData.alertas?.length) { lista.innerHTML = '<li style="text-align:center; color: var(--cor-texto-claro)">🎉 Nenhum alerta no momento.</li>'; return; }
       lista.innerHTML = appData.alertas.map(item => {
         const cl = item.tipo === 'Vencido' ? 'alert-vencido' : (item.tipo === 'Vencimento Próximo' ? 'alert-proximo' : '');
@@ -1727,7 +1678,6 @@
 
     function renderizarMovimentacoes() {
       const tbody = document.getElementById('corpo-tabela-movimentacoes');
-      if (!unidadeAtual) { tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color: var(--cor-texto-claro)">${MSG_SEM_UNIDADE}</td></tr>`; return; }
       if (!appData.movimentacoes?.length) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--cor-texto-claro)">Nenhuma movimentação encontrada.</td></tr>'; return; }
       tbody.innerHTML = appData.movimentacoes.map(mov =>
         `<tr><td data-label="Data">${escapeHtml(mov.dataHora)}</td><td data-label="Tipo" class="${mov.tipo==='Entrada'?'tipo-entrada':'tipo-saida'}">${escapeHtml(mov.tipo)}${mov.pendente ? ' ⏳' : ''}</td><td data-label="Item">${escapeHtml(mov.item)}</td><td data-label="Lote">${escapeHtml(mov.lote)}</td><td data-label="Validade">${escapeHtml(mov.validade)}</td><td data-label="Qtd">${escapeHtml(mov.qtd)}</td></tr>`
@@ -1736,19 +1686,9 @@
 
     function filtrarTabela(idTabela, input) {
       const filtro = input.value.toUpperCase();
-      const linhas = [...document.getElementById(idTabela).querySelectorAll('tbody tr')];
+      const linhas = document.getElementById(idTabela).querySelectorAll('tbody tr');
       requestAnimationFrame(() => {
-        // Linhas com data-grupo (estoque) aparecem juntas: se qualquer lote bater, o item todo aparece.
-        const grupos = new Map();
-        linhas.forEach(row => {
-          const g = row.dataset.grupo;
-          if (g !== undefined) grupos.set(g, grupos.get(g) || row.textContent.toUpperCase().includes(filtro));
-        });
-        linhas.forEach(row => {
-          const g = row.dataset.grupo;
-          const ok = g !== undefined ? grupos.get(g) : row.textContent.toUpperCase().includes(filtro);
-          row.style.display = ok ? '' : 'none';
-        });
+        linhas.forEach(row => row.style.display = row.textContent.toUpperCase().includes(filtro) ? '' : 'none');
       });
     }
 
@@ -1837,9 +1777,6 @@
         linhasServidor = carregarLinhasCache();
         Object.assign(appData, montarDados());
         refreshActivePage();
-      } else {
-        refreshActivePage();                 // mostra a mensagem de aparelho não vinculado
-        setTimeout(pedirVinculoUnidade, 400); // e já pede a senha da unidade
       }
       
       carregarConfiguracaoEntrada();
